@@ -17,3 +17,8 @@
    ![[Pasted image 20260203113612.png]]
 6. SIBR_viewer (встроенный в основной репозиторий)
    ![[Pasted image 20260203120212.png]]
+
+# Viewers
+
+1. https://github.com/nv-tlabs/3dgrut
+2. https://github.com/nvpro-samples/vk_gaussian_splatting (vulkan)

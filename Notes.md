@@ -31,16 +31,12 @@
 1. https://medium.com/data-science/a-comprehensive-overview-of-gaussian-splatting-e7d570081362 - подробный обзор GS (есть ссылки на репозитории, с которыми можно поиграться + ссылки на статьи, где можно что-то интересное почитать)
 2. https://mrnerf.github.io/awesome-3D-gaussian-splatting/ - сборник "всех" статей про 3DGS (Awesome-3D-Gaussian-Splatting-Paper-List)
 3. https://arxiv.org/pdf/2401.03890 !!! ТУТ ЕСТЬ ПРО ПРИМЕНЕНИЕ 3DGS (+ https://github.com/guikunchen/Awesome3DGS - статьи о применении 3DGS)
+4. https://huggingface.co/papers/2503.12284
+5. https://city-super.github.io/matrixcity/ - огромный датасет города из 100кк гауссиан
 
 Вопросы:
 1. Много комментариев людей о том, что это бесполезная технология, которая не найдет большого применения (3D/4DGS). Да и вообще вопрос про применимость данного метода (в VR, в киноиндустрии?)
 2. Можно ли попробовать Triangle Splatting?
-
-
-Обзоры статей:
-1. Дифференциальный рендеринг - обзор
-   Заметки [[Differentiable Rendering - A Survey]]
-   Ссылка на статью - https://arxiv.org/abs/2006.12057 
 
 
 Предложения:
