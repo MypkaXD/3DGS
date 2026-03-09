@@ -16,7 +16,7 @@ void dump3(std::ofstream& file, double x, double y, double z)
 
 void create_2D() {
 
-	double a = 10.0; // mean of the Gaussian distribution (like point on x axis where the peak is located) (-inf, inf)
+	double a = 0.0; // mean of the Gaussian distribution (like point on x axis where the peak is located) (-inf, inf)
 	double sigma = 0.05; // standard deviation of the Gaussian distribution (controls the width of the bell curve) (0.0, inf) if sigma is small, the bell curve will be narrow and tall; if sigma is large, the bell curve will be wide and short
 
 	// use 3-sigma rule to determine the range of x values
@@ -74,7 +74,7 @@ void create_3D() {
 		std::vector<std::vector<std::tuple<double, double, double>>> points(n, std::vector<std::tuple<double, double, double>>(n));
 
 		std::vector<double> a_values = { 0.0, 0.0};
-		std::vector<double> sigma_values = { 0.5, 0.5 };
+		std::vector<double> sigma_values = { 0.1, 0.5 };
 
 		double x_min = a_values[0] - 3.0 * sigma_values[0];
 		double x_max = a_values[0] + 3.0 * sigma_values[0];
@@ -144,7 +144,7 @@ void create_4D() {
 		std::vector<std::tuple<double, double, double, double>> points(n * n * n);
 
 		std::vector<double> a_values = { 0.0, 0.0, 0.0 };
-		std::vector<double> sigma_values = { 0.1, 0.1, 0.7 };
+		std::vector<double> sigma_values = { 0.5, 0.7, 0.9 };
 
 		double x_min = a_values[0] - 3.0 * sigma_values[0];
 		double x_max = a_values[0] + 3.0 * sigma_values[0];
@@ -226,8 +226,8 @@ void create_4D() {
 int main()
 {
 
-	create_2D();
-	create_3D();
+	// create_2D();
+	// create_3D();
 	create_4D();
 
 
