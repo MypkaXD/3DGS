@@ -1,0 +1,10 @@
+name: mahalanobis_distance
+channels:
+    - defaults
+    - conda-forge
+dependencies:
+    - python=3.13
+    - matplotlib
+    - numpy
+    - ipykernel
+    - scipy
