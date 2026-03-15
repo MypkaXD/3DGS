@@ -1,4 +1,6 @@
 #include <iostream>
+#include <random>
+#include <array>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -34,6 +36,32 @@ bool firstMouse = true;
 float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
 
+
+void generate_gaussians(std::vector<Ellipsoid>& data, std::size_t n)
+{
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	std::uniform_int_distribution<int> dis_mu(-1000, 1000);
+	std::uniform_real_distribution<float> dis_sigma(1, 2);
+
+	data.clear();
+	data.reserve(n);
+
+	for (std::size_t idx = 0; idx < n; ++idx)
+	{
+		float sigma_x = dis_sigma(gen);
+		float sigma_y = dis_sigma(gen);
+		float sigma_z = dis_sigma(gen);
+
+		float mu_x = dis_mu(gen);
+		float mu_y = dis_mu(gen);
+		float mu_z = dis_mu(gen);
+
+		data.emplace_back(std::array<float, 3>{ mu_x, mu_y, mu_z }, std::array<float, 3>{sigma_x, sigma_y, sigma_z}, 7.91);
+	}
+}
+
 int main()
 {
 
@@ -65,31 +93,55 @@ int main()
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 130");
 
-	Ellipsoid ellipsoid(2.0, 1.0, 10.0, 1.0);
-	ellipsoid.generate(100);
+	std::vector<Ellipsoid> gaussians;
+	generate_gaussians(gaussians, 10000);
 
-	unsigned int VAO, VBO, EBO;
+	UV uv(10, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
+	uv.generate();
+
+	unsigned int VAO;
+	unsigned int VBO_UV, VBO_Gaussians;
+	unsigned int EBO;
 
 	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &VBO_UV);
+	glGenBuffers(1, &VBO_Gaussians);
 	glGenBuffers(1, &EBO);
 
 	glBindVertexArray(VAO);
 
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, ellipsoid.get_vertex_size(), ellipsoid.get_vertices().data(), GL_STATIC_DRAW);
-	
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, ellipsoid.get_indices_size(), ellipsoid.get_indices().data(), GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO_UV);
+	glBufferData(GL_ARRAY_BUFFER, uv.get_vertices().size() * sizeof(float), uv.get_vertices().data(), GL_STATIC_DRAW);
 
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, uv.get_indices().size() * sizeof(unsigned int), uv.get_indices().data(), GL_STATIC_DRAW);
+
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO_Gaussians);
+	glBufferData(GL_ARRAY_BUFFER, gaussians.size() * sizeof(Ellipsoid), gaussians.data(), GL_STATIC_DRAW);
+
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Ellipsoid), (void*)0);
+	glEnableVertexAttribArray(1);
+
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Ellipsoid), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Ellipsoid), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(3);
+
+	glVertexAttribDivisor(1, 1);
+	glVertexAttribDivisor(2, 1);
+	glVertexAttribDivisor(3, 1);
 
 	glBindVertexArray(0);
 
 	Shader shader;
 	shader.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader.frag", GL_FRAGMENT_SHADER));
 	shader.link();
+
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	while (!glfwWindowShouldClose(window))
 	{
@@ -106,14 +158,20 @@ int main()
 		glBindVertexArray(VAO);
 
 		glm::mat4 view = camera.get_view_matrix();; // матрица камеры
-		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);; // матрица проекции
+		glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f); // матрица проекции
 		glm::mat4 model = glm::mat4(1.0f);
 
 		glUniformMatrix4fv(glGetUniformLocation(shader.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
 		glUniformMatrix4fv(glGetUniformLocation(shader.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 		glUniformMatrix4fv(glGetUniformLocation(shader.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
 
-		glDrawElements(GL_TRIANGLES, ellipsoid.get_indices().size(), GL_UNSIGNED_INT, 0);
+		glDrawElementsInstanced(
+			GL_TRIANGLES,
+			uv.get_indices().size(),
+			GL_UNSIGNED_INT,
+			0,
+			gaussians.size()
+		);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -128,7 +186,8 @@ int main()
 	}
 
 	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &VBO);
+	glDeleteBuffers(1, &VBO_Gaussians);
+	glDeleteBuffers(1, &VBO_UV);
 	glDeleteBuffers(1, &EBO);
 	shader.~Shader();
 
