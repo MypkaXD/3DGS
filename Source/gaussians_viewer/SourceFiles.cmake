@@ -1,5 +1,5 @@
 set (GaussiansViewer_INC
-
+	include/Ellipsoid.h
 )
 
 set (GaussiansViewer_SRC
