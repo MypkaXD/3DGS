@@ -68,6 +68,10 @@ public:
 		glUseProgram(m_shader_id);
 	}
 
+	unsigned int get_id() const {
+		return m_shader_id;
+	}
+
 };
 
 
