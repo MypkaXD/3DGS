@@ -143,8 +143,8 @@ void create_4D() {
 		std::size_t n = 50;
 		std::vector<std::tuple<double, double, double, double>> points(n * n * n);
 
-		std::vector<double> a_values = { 0.0, 0.0, 0.0 };
-		std::vector<double> sigma_values = { 0.5, 0.7, 0.9 };
+		std::vector<double> a_values = { 10.0, 0.0, 0.0 };
+		std::vector<double> sigma_values = { 10.0, 2.0, 3.0 };
 
 		double x_min = a_values[0] - 3.0 * sigma_values[0];
 		double x_max = a_values[0] + 3.0 * sigma_values[0];
@@ -223,13 +223,84 @@ void create_4D() {
 }
 
 
+void create_ellipsoid()
+{
+
+	double min_phi = 0.0;
+	double max_phi = 2 * M_PI;
+
+	double min_theta = 0.0;
+	double max_theta = M_PI;
+
+	std::size_t n = 100;
+
+	double step_phi = (max_phi - min_phi) / double(n - 1);
+	double step_theta = (max_theta - min_theta) / double(n - 1);
+
+	// double Q = 7.814727903251179; // 95%
+	double Q = 1; // 19.87%
+	
+	std::vector<double> mu = { 10.0, 0.0, 0.0 };
+	std::vector<double> sigma = { 10.0, 2.0, 3.0 };
+
+	std::ofstream file("ellipsoid.txt");
+
+	if (file.is_open())
+	{
+		file << "triangles: ellipsoid" << std::endl;
+
+		for (std::size_t idx_i = 0; idx_i < n - 1; ++idx_i)
+		{
+			double phi_1 = min_phi + step_phi * idx_i;
+			double phi_2 = min_phi + step_phi * (idx_i + 1);
+
+			for (std::size_t idx_j = 0; idx_j < n - 1; ++idx_j)
+			{
+				double theta_1 = min_theta + step_theta * idx_j;
+				double theta_2 = min_theta + step_theta * (idx_j + 1);
+
+				double x1 = sigma[0] * std::sqrt(Q) * std::sin(theta_1) * std::cos(phi_1) + mu[0];
+				double y1 = sigma[1] * std::sqrt(Q) * std::sin(theta_1) * std::sin(phi_1) + mu[1];
+				double z1 = sigma[2] * std::sqrt(Q) * std::cos(theta_1) + +mu[2];
+
+				double x2 = sigma[0] * std::sqrt(Q) * std::sin(theta_1) * std::cos(phi_2) + mu[0];
+				double y2 = sigma[1] * std::sqrt(Q) * std::sin(theta_1) * std::sin(phi_2) + mu[1];
+				double z2 = sigma[2] * std::sqrt(Q) * std::cos(theta_1) + +mu[2];
+
+				double x3 = sigma[0] * std::sqrt(Q) * std::sin(theta_2) * std::cos(phi_2) + mu[0];
+				double y3 = sigma[1] * std::sqrt(Q) * std::sin(theta_2) * std::sin(phi_2) + mu[1];
+				double z3 = sigma[2] * std::sqrt(Q) * std::cos(theta_2) + +mu[2];
+
+				double x4 = sigma[0] * std::sqrt(Q) * std::sin(theta_2) * std::cos(phi_1) + mu[0];
+				double y4 = sigma[1] * std::sqrt(Q) * std::sin(theta_2) * std::sin(phi_1) + mu[1];
+				double z4 = sigma[2] * std::sqrt(Q) * std::cos(theta_2) + +mu[2];
+
+				dump3(file, x1, y1, z1);
+				dump3(file, x2, y2, z2);
+				dump3(file, x3, y3, z3);
+				dump3(file, 1.0, 0.0, 0.0);
+				file << "\n";
+
+				dump3(file, x1, y1, z1);
+				dump3(file, x3, y3, z3);
+				dump3(file, x4, y4, z4);
+				dump3(file, 1.0, 0.0, 0.0);
+				file << "\n";
+			}
+		}
+
+		file.close();
+	}
+
+}
+
 int main()
 {
 
 	// create_2D();
 	// create_3D();
 	create_4D();
-
+	create_ellipsoid();
 
 	return 0;
 }
