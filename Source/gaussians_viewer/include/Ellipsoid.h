@@ -93,9 +93,10 @@ struct Ellipsoid
 {
 	std::array<float, 3> mu;
 	std::array<float, 3> sigma;
+	std::array<float, 4> quaternion;
 	float q;
 
-	Ellipsoid(std::array<float, 3> mu, std::array<float, 3> sigma, float q) : mu(mu), sigma(sigma), q(q)
+	Ellipsoid(std::array<float, 3> mu, std::array<float, 3> sigma, std::array<float, 4> quaternion, float q) : mu(mu), sigma(sigma), quaternion(quaternion), q(q)
 	{
 	}
 };
