@@ -10,6 +10,10 @@ struct AABB
     glm::vec3 center;
     glm::vec3 extent;
 
+    AABB(glm::vec3 center, glm::vec3 extent)
+		: center(center), extent(extent) {
+	}
+
     AABB(const glm::mat3& R,
         const glm::vec3& mu,
         const glm::vec3& sigma,

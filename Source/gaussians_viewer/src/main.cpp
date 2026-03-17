@@ -15,10 +15,23 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "tinyply.h"
+
 #include <Shader.h>
 #include <Camera.h>
 #include <Ellipsoid.h>
 #include <AABB.h>
+
+#include <bvh/v2/bvh.h>
+#include <bvh/v2/vec.h>
+#include <bvh/v2/bbox.h>
+#include <bvh/v2/default_builder.h>
+#include <bvh/v2/node.h>
+
+using Scalar = float;
+using Vec3 = bvh::v2::Vec<Scalar, 3>;
+using BBox = bvh::v2::BBox<Scalar, 3>;
+using Node = bvh::v2::Node<Scalar, 3>;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -38,13 +51,114 @@ float deltaTime = 0.0f;	// time between current frame and last frame
 float lastFrame = 0.0f;
 
 
+void read_gaussian_splat_ply(const std::string& filepath, std::vector<Ellipsoid>& gaussians)
+{
+
+	std::ifstream file_stream(filepath, std::ios::binary);
+	if (!file_stream) throw std::runtime_error("file_stream failed to open " + filepath);
+
+	file_stream.seekg(0, std::ios::end);
+	const float size_mb = file_stream.tellg() * float(1e-6);
+	file_stream.seekg(0, std::ios::beg);
+
+	tinyply::PlyFile splat_ply;
+	splat_ply.parse_header(file_stream);
+
+	std::cout << "\t[ply_header] Type: " << (splat_ply.is_binary_file() ? "binary" : "ascii") << std::endl;
+	for (const auto& c : splat_ply.get_comments()) std::cout << "\t[ply_header] Comment: " << c << std::endl;
+	for (const auto& c : splat_ply.get_info()) std::cout << "\t[ply_header] Info: " << c << std::endl;
+
+	for (const auto& e : splat_ply.get_elements())
+	{
+		std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
+		for (const auto& p : e.properties)
+		{
+			std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
+			if (p.isList) std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
+			std::cout << std::endl;
+		}
+	}
+
+	std::shared_ptr<tinyply::PlyData> xyz, nrm, f_dc, f_rest, opacity, scales, quat_rot;
+
+	try { xyz = splat_ply.request_properties_from_element("vertex", { "x", "y", "z" }); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	try { nrm = splat_ply.request_properties_from_element("vertex", { "nx", "ny", "nz" }); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	try { opacity = splat_ply.request_properties_from_element("vertex", { "opacity" }); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	try { scales = splat_ply.request_properties_from_element("vertex", { "scale_0", "scale_1", "scale_2" }); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	try { quat_rot = splat_ply.request_properties_from_element("vertex", { "rot_0", "rot_1", "rot_2", "rot_3" }); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	std::vector<std::string> sh_dc_names;
+	std::vector<std::string> sh_rest_names;
+
+	std::vector<tinyply::PlyElement> elements = splat_ply.get_elements();
+	auto vertex_element_iter = std::find_if(elements.begin(), elements.end(), [](const tinyply::PlyElement& e) { return e.name == "vertex"; });
+
+	if (vertex_element_iter == elements.end())
+	{
+		throw std::runtime_error("[error] no vertex element found in ply file");
+	}
+
+	for (const auto& prop : vertex_element_iter->properties)
+	{
+		if (prop.name.substr(0, 5) == "f_dc_") { sh_dc_names.push_back(prop.name); }
+		else if (prop.name.substr(0, 7) == "f_rest_") { sh_rest_names.push_back(prop.name); }
+	}
+
+	// spherical harmonic coefficients
+	try { f_dc = splat_ply.request_properties_from_element("vertex", sh_dc_names); }
+	catch (const std::exception& e) { std::cerr << "tinyply exception: " << e.what() << std::endl; }
+
+	try
+	{
+		f_rest = splat_ply.request_properties_from_element("vertex", sh_rest_names);
+	}
+	catch (...)
+	{
+		f_rest.reset(); // not an error if there are no f_rest components
+	}
+
+	splat_ply.read(file_stream);
+
+	if (xyz)      std::cout << "\tRead " << xyz->count << " total xyz " << std::endl;
+	if (nrm)      std::cout << "\tRead " << nrm->count << " total normals " << std::endl;
+	if (opacity)  std::cout << "\tRead " << opacity->count << " total opacity " << std::endl;
+	if (scales)   std::cout << "\tRead " << scales->count << " total scales " << std::endl;
+	if (quat_rot) std::cout << "\tRead " << quat_rot->count << " total quaternion rotations" << std::endl;
+	if (f_dc)     std::cout << "\tRead " << f_dc->count << " total sh f_dc " << std::endl;
+	if (f_rest)   std::cout << "\tRead " << f_rest->count << " total sh f_rest " << std::endl;
+
+	for (std::size_t idx = 0; idx < xyz->count; ++idx)
+	{
+		float mu_x = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
+		float mu_y = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
+		float mu_z = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
+		float sigma_x = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0];
+		float sigma_y = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1];
+		float sigma_z = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2];
+		float quaternion_x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
+		float quaternion_y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
+		float quaternion_z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
+		float quaternion_w = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
+		gaussians.emplace_back(std::array<float, 3>{ mu_x, mu_y, mu_z }, std::array<float, 3>{sigma_x, sigma_y, sigma_z}, std::array<float, 4>{quaternion_x, quaternion_y, quaternion_z, quaternion_w}, std::sqrt(7.91));
+	}
+}
+
 void generate_gaussians(std::vector<Ellipsoid>& data, std::size_t n)
 {
 	std::random_device rd;
 	std::mt19937 gen(rd());
 
 	std::uniform_int_distribution<int> dis_mu(-100, 100);
-	std::uniform_real_distribution<float> dis_sigma(1, 2);
+	std::uniform_real_distribution<float> dis_sigma(1, 5);
 	std::normal_distribution<float> dis_normal(0.0f, 1.0f);
 
 	data.clear();
@@ -115,6 +229,23 @@ void generate_AABB(std::vector<Ellipsoid>& gaussians, std::vector<AABB>& aabb)
 	}
 }
 
+BBox to_bbox(const AABB& aabb)
+{
+	Vec3 min = Vec3(
+		aabb.center.x - aabb.extent.x,
+		aabb.center.y - aabb.extent.y,
+		aabb.center.z - aabb.extent.z
+	);
+
+	Vec3 max = Vec3(
+		aabb.center.x + aabb.extent.x,
+		aabb.center.y + aabb.extent.y,
+		aabb.center.z + aabb.extent.z
+	);
+
+	return BBox(min, max);
+}
+
 int main()
 {
 
@@ -137,7 +268,7 @@ int main()
 	glfwSetCursorPosCallback(window, mouse_callback);
 	glfwSetScrollCallback(window, scroll_callback);
 
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_CAPTURED);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	glEnable(GL_DEPTH_TEST);
 
@@ -147,12 +278,56 @@ int main()
 	ImGui_ImplOpenGL3_Init("#version 130");
 
 	std::vector<Ellipsoid> gaussians;
-	generate_gaussians(gaussians, 1000);
+	// read_gaussian_splat_ply("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply", gaussians);
+	generate_gaussians(gaussians, 10);
 
 	std::vector<AABB> aabb;
 	generate_AABB(gaussians, aabb);
 
-	UV uv(10, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
+	std::vector<BBox> bboxes;
+	std::vector<Vec3> centers;
+
+	bboxes.reserve(aabb.size());
+	centers.reserve(aabb.size());
+
+	for (const auto& box : aabb)
+	{
+		BBox bbox = to_bbox(box);
+		bboxes.push_back(bbox);
+		centers.push_back(bbox.get_center());
+	}
+
+	typename bvh::v2::DefaultBuilder<Node>::Config config;
+	config.quality = bvh::v2::DefaultBuilder<Node>::Quality::High;
+	config.min_leaf_size = 4;
+	config.max_leaf_size = 8;
+	
+	auto bvh = bvh::v2::DefaultBuilder<Node>::build(bboxes, centers, config);
+
+	aabb.clear();
+	aabb.reserve(bvh.nodes.size());
+
+	for (std::size_t idx = 0; idx < bvh.nodes.size(); ++idx)
+	{
+		auto box = bvh.nodes[idx].get_bbox();
+
+		// Get center and extent correctly
+		glm::vec3 center(
+			box.min[0] + (box.max[0] - box.min[0]) * 0.5f,
+			box.min[1] + (box.max[1] - box.min[1]) * 0.5f,
+			box.min[2] + (box.max[2] - box.min[2]) * 0.5f
+		);
+
+		glm::vec3 extent(
+			(box.max[0] - box.min[0]) * 0.5f,
+			(box.max[1] - box.min[1]) * 0.5f,
+			(box.max[2] - box.min[2]) * 0.5f
+		);
+
+		aabb.emplace_back(center, extent);
+	}
+
+	UV uv(20, 20, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
 	uv.generate();
 
 	float cube_vertices[] = {
@@ -267,7 +442,7 @@ int main()
 	shader_aabb.link();
 
 	bool draw_ellipsoid_by_lines = false;
-	bool draw_AABB = false;
+	bool draw_AABB = true;
 
 	while (!glfwWindowShouldClose(window))
 	{

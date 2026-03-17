@@ -15,19 +15,33 @@ set GLM_URL=https://github.com/g-truc/glm/archive/refs/heads/master.zip
 set GLM_ZIP=glm-master.zip
 set GLM_INSTALL_DIR=glm-master
 
+set BVH_URL=https://github.com/madmann91/bvh/archive/refs/heads/master.zip
+set BVH_ZIP=bvh-master.zip
+set BVH_INSTALL_DIR=bvh-master
+
+set TINYPLY_URL=https://github.com/ddiakopoulos/tinyply/archive/refs/heads/main.zip
+set TINYPLY_ZIP=tinyply-main.zip
+set TINYPLY_INSTALL_DIR=tinyply-main
+
 set URLS[0]=%GLFW_URL%
 set URLS[1]=%IMGUI_URL%
 set URLS[2]=%GLM_URL%
+set URLS[3]=%BVH_URL%
+set URLS[4]=%TINYPLY_URL%
 
 set ZIPS[0]=%GLFW_ZIP%
 set ZIPS[1]=%IMGUI_ZIP%
 set ZIPS[2]=%GLM_ZIP%
+set ZIPS[3]=%BVH_ZIP%
+set ZIPS[4]=%TINYPLY_ZIP%
 
 set DIRS[0]=%GLFW_INSTALL_DIR%
 set DIRS[1]=%IMGUI_INSTALL_DIR%
 set DIRS[2]=%GLM_INSTALL_DIR%
+set DIRS[3]=%BVH_INSTALL_DIR%
+set DIRS[4]=%TINYPLY_INSTALL_DIR%
 
-for /l %%i in (0, 1, 2) do (
+for /l %%i in (0, 1, 4) do (
     
     echo Downloading !ZIPS[%%i]! from !URLS[%%i]!
     powershell -Command "(New-Object Net.WebClient).DownloadFile('!URLS[%%i]!', '!ZIPS[%%i]!')"
@@ -49,6 +63,17 @@ cmake -S "%SDK_DIR%/%GLFW_INSTALL_DIR%" -B "%SDK_DIR%/%GLFW_INSTALL_DIR%/mybuild
 
 cmake --build "%SDK_DIR%/%GLFW_INSTALL_DIR%/mybuild" --config Release --target INSTALL
 
+
 cmake -S "%SDK_DIR%/%GLM_INSTALL_DIR%" -B "%SDK_DIR%/%GLM_INSTALL_DIR%/mybuild" -G "Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX="%SDK_DIR%/%GLM_INSTALL_DIR%/myinstall" -DGLM_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF
 
 cmake --build "%SDK_DIR%/%GLM_INSTALL_DIR%/mybuild" --config Release --target INSTALL
+
+
+cmake -S "%SDK_DIR%/%BVH_INSTALL_DIR%" -B "%SDK_DIR%/%BVH_INSTALL_DIR%/mybuild" -G "Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX="%SDK_DIR%/%BVH_INSTALL_DIR%/myinstall" -DENABLE_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+
+cmake --build "%SDK_DIR%/%BVH_INSTALL_DIR%/mybuild" --config Release --target INSTALL
+
+
+cmake -S "%SDK_DIR%/%TINYPLY_INSTALL_DIR%" -B "%SDK_DIR%/%TINYPLY_INSTALL_DIR%/mybuild" -G "Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX="%SDK_DIR%/%TINYPLY_INSTALL_DIR%/myinstall" -DCMAKE_BUILD_TYPE=Release
+
+cmake --build "%SDK_DIR%/%TINYPLY_INSTALL_DIR%/mybuild" --config Release --target INSTALL

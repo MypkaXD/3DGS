@@ -6,6 +6,8 @@ SET(IMGUI_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/imgui-master CACHE PATH "S
 SET(GLFW_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/glfw-master/myinstall CACHE PATH "Set GLFW dir.")
 SET(GLAD_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/glad CACHE PATH "Set GLAD dir.")
 SET(GLM_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/glm-master CACHE PATH "Set GLM dir.")
+SET(BVH_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/bvh-master/myinstall CACHE PATH "Set BVH dir.")
+SET(TINYPLY_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/tinyply-main/myinstall CACHE PATH "Set TinyPly dir.")
 
 project(${PROJECT_NAME})
 
@@ -37,10 +39,13 @@ target_include_directories(3rdparty PUBLIC
 	${IMGUI_INSTALL_DIR}/backends
 	${GLFW_INSTALL_DIR}/include
 	${GLAD_INSTALL_DIR}/include
+	${BVH_INSTALL_DIR}/include
+	${TINYPLY_INSTALL_DIR}/include
 )
 
 target_link_libraries(3rdparty PUBLIC 
 	${GLFW_INSTALL_DIR}/lib/glfw3.lib
+	${TINYPLY_INSTALL_DIR}/lib/tinyply.lib
 	glm::glm-header-only
 )
 
