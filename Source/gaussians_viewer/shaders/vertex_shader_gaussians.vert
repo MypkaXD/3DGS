@@ -1,10 +1,11 @@
 #version 330 core
 
-layout (location = 0) in vec2 pos_uv;
-layout (location = 1) in vec3 mu;
-layout (location = 2) in vec3 sigma;
-layout (location = 3) in vec4 quat;
-layout (location = 4) in float q;
+layout (location = 0) in vec3 mu;
+layout (location = 1) in vec3 sigma;
+layout (location = 2) in vec4 quat;
+layout (location = 3) in float q;
+layout (location = 4) in float opacity;
+layout (location = 5) in vec2 pos_uv;
 
 uniform mat4 view;
 uniform mat4 projection;

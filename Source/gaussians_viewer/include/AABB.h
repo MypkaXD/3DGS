@@ -38,6 +38,9 @@ struct AABB
         extent = (max - min) * 0.5f;
     }
 
+    static float cube_vertices[24];
+    static unsigned int cube_indices[24];
+
 private:
 
     glm::vec3 calculate_local_coord(const glm::mat3& R,
@@ -74,5 +77,60 @@ private:
         };
     }
 };
+
+float AABB::cube_vertices[24] = {
+    -1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f
+};
+
+unsigned int AABB::cube_indices[24] = {
+    0,1, 1,2, 2,3, 3,0,
+    4,5, 5,6, 6,7, 7,4,
+    0,4, 1,5, 2,6, 3,7
+};
+
+void generate_AABB_from_gaussians(const std::vector<Ellipsoid>& gaussians, std::vector<AABB>& aabb)
+{
+    aabb.clear();
+    aabb.reserve(gaussians.size());
+
+    for (std::size_t idx = 0; idx < gaussians.size(); ++idx)
+    {
+
+        float x = gaussians[idx].quaternion[0];
+        float y = gaussians[idx].quaternion[1];
+        float z = gaussians[idx].quaternion[2];
+        float w = gaussians[idx].quaternion[3];
+
+        float xx = x * x;
+        float xy = x * y;
+        float xz = x * z;
+        float xw = x * w;
+
+        float yy = y * y;
+        float yz = y * z;
+        float yw = y * w;
+
+        float zz = z * z;
+        float zw = z * w;
+
+        glm::mat3 R = glm::mat3{
+            1.0 - 2.0 * (yy + zz), 2.0 * (xy - zw), 2.0 * (xz + yw),
+            2.0 * (xy + zw), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - xw),
+            2.0 * (xz - yw), 2.0 * (yz + xw), 1.0 - 2.0 * (xx + yy)
+        };
+
+        glm::vec3 mu = glm::vec3{ gaussians[idx].mu[0], gaussians[idx].mu[1], gaussians[idx].mu[2] };
+        glm::vec3 sigma = glm::vec3{ gaussians[idx].sigma[0], gaussians[idx].sigma[1], gaussians[idx].sigma[2] };
+
+        aabb.emplace_back(R, mu, sigma, 7.91);
+    }
+}
 
 #endif

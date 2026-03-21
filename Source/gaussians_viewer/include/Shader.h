@@ -17,14 +17,16 @@ private:
 
 public:
 
-	Shader()
-	{
-		m_shader_id = glCreateProgram();
-	}
+	Shader() {}
 
 	~Shader()
 	{
 		glDeleteProgram(m_shader_id);
+	}
+
+	void create()
+	{
+		m_shader_id = glCreateProgram();
 	}
 
 	template<typename... Args>
