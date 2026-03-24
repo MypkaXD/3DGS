@@ -1,8 +1,12 @@
 set (GaussiansViewer_INC
-	include/Ellipsoid.h
-	include/Shader.h
 	include/AABB.h
+	include/App.h
+	include/BVH.h
 	include/Camera.h
+	include/Ellipsoid.h
+	include/SceneLoader.h
+	include/Shader.h
+	include/UV.h
 )
 
 set (GaussiansViewer_SRC

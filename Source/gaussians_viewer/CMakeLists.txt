@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 4.2)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(PROJECT_NAME GaussiansViewer)
 
 SET(IMGUI_INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/sdk/imgui-master CACHE PATH "Set Dear ImGui dir.")

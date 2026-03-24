@@ -10,6 +10,8 @@
 
 #include <Ellipsoid.h>
 
+#define C0 0.28209479177387814
+
 class SceneLoader
 {
 private:
@@ -26,6 +28,7 @@ public:
 		std::uniform_int_distribution<int> dis_mu(-100, 100);
 		std::uniform_real_distribution<float> dis_sigma(1, 5);
 		std::normal_distribution<float> dis_normal(0.0f, 1.0f);
+		std::uniform_real_distribution<float> dis_uniform_0_to_1(0.0f, 1.0f);
 
 		gaussians.clear();
 		gaussians.reserve(n);
@@ -52,13 +55,18 @@ public:
 			float quaternion_z = z / norm;
 			float quaternion_w = w / norm;
 
-			gaussians.emplace_back(
-				std::array<float, 3>{ mu_x, mu_y, mu_z },
-				std::array<float, 3>{sigma_x, sigma_y, sigma_z},
-				std::array<float, 4>{quaternion_x, quaternion_y, quaternion_z, quaternion_w},
-				std::sqrt(7.91),
-				1.0f
-			);
+			float r = dis_uniform_0_to_1(gen);
+			float g = dis_uniform_0_to_1(gen);
+			float b = dis_uniform_0_to_1(gen);
+
+			//gaussians.emplace_back(
+			//	std::array<float, 3>{ mu_x, mu_y, mu_z },
+			//	std::array<float, 3>{sigma_x, sigma_y, sigma_z},
+			//	std::array<float, 4>{quaternion_x, quaternion_y, quaternion_z, quaternion_w},
+			//	std::array<float, 3>{r,g,b},
+			//	dis_uniform_0_to_1(gen),
+			//	std::sqrt(1.0)
+			//);
 		}
 	}
 	void create_scene_from_file(const std::string& path_to_ply)
@@ -151,28 +159,45 @@ public:
 
 		for (std::size_t idx = 0; idx < xyz->count; ++idx)
 		{
-			float mu_x = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
-			float mu_y = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
-			float mu_z = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
-			float sigma_x = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0];
-			float sigma_y = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1];
-			float sigma_z = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2];
-			float quaternion_x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
-			float quaternion_y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
-			float quaternion_z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
-			float quaternion_w = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
+			Ellipsoid e;
 
-			gaussians.emplace_back(
-				std::array<float, 3>{ mu_x, mu_y, mu_z }, 
-				std::array<float, 3>{sigma_x, sigma_y, sigma_z}, 
-				std::array<float, 4>{quaternion_x, quaternion_y, quaternion_z, quaternion_w}, 
-				std::sqrt(7.91),
-				0.0f
-			);
+			e.mu[0] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
+			e.mu[1] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
+			e.mu[2] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
+
+			e.sigma[0] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0];
+			e.sigma[1] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1];
+			e.sigma[2] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2];
+
+			e.quaternion[0] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
+			e.quaternion[1] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
+			e.quaternion[2] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
+			e.quaternion[3] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
+
+			e.sh_dc[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
+			e.sh_dc[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
+			e.sh_dc[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
+
+			for (std::size_t sh_idx = 0; sh_idx < 15; ++sh_idx)
+			{
+				if (f_rest)
+				{
+					if (idx == 0)
+					{
+						e.sh_rest[sh_idx] = reinterpret_cast<float*>(f_rest->buffer.get())[idx * 15 + sh_idx];
+						std::cout << e.sh_rest[sh_idx] << std::endl;
+					}
+				}
+			}
+
+			e.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			e.Q = 1.0f;
+
+			gaussians.emplace_back(e);
 		}
 	}
 
-	const std::vector<Ellipsoid>& get_gaussians() const { return gaussians; }
+	std::vector<Ellipsoid>& get_gaussians() { return gaussians; }
 };
 
 

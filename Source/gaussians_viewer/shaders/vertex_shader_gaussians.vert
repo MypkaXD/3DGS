@@ -1,15 +1,32 @@
-#version 330 core
+#version 430 core
 
-layout (location = 0) in vec3 mu;
-layout (location = 1) in vec3 sigma;
-layout (location = 2) in vec4 quat;
-layout (location = 3) in float q;
-layout (location = 4) in float opacity;
-layout (location = 5) in vec2 pos_uv;
+layout (location = 0) in vec2 pos_uv; // Spherical coordinates (theta, phi)
 
 uniform mat4 view;
 uniform mat4 projection;
 uniform mat4 model;
+
+out vec3 out_color;
+
+struct Ellipsoid
+{
+	float mu[3];
+	float sigma[3];
+	float quaternion[4];
+	float sh_dc[3];
+	float sh_rest[45];
+
+	float opacity;
+	float Q;
+};
+
+layout(std430, binding = 0) buffer Ellipsoids
+{
+    Ellipsoid ellipsoids[];
+};
+
+#define C0 0.28209479177387814
+#define C1 0.4886025119029199
 
 mat3 quaternion_to_matrix(vec4 q) {
     float x = q.x, y = q.y, z = q.z, w = q.w;
@@ -36,18 +53,33 @@ mat3 quaternion_to_matrix(vec4 q) {
 void main()
 {
 
-    vec3 sphere_point = vec3(
-        sin(pos_uv.y) * cos(pos_uv.x),
-        sin(pos_uv.y) * sin(pos_uv.x),
-        cos(pos_uv.y)
-    );
+    const Ellipsoid ellipsoid = ellipsoids[gl_InstanceID];
 
-    vec3 scaled_point = sphere_point * sigma;
+    // Convert spherical coordinates
+    vec3 sphere_point = vec3(sin(pos_uv.y) * cos(pos_uv.x), sin(pos_uv.y) * sin(pos_uv.x), cos(pos_uv.y));
 
-    mat3 rotation = quaternion_to_matrix(quat);
+    // Scale the point by the ellipsoid's sigma
+    vec3 scaled_point = vec3(sphere_point[0] * ellipsoid.sigma[0], sphere_point[1] * ellipsoid.sigma[1], sphere_point[2] * ellipsoid.sigma[2]);
+
+    // Rotate the point using the ellipsoid's quaternion
+    mat3 rotation = quaternion_to_matrix(vec4(ellipsoid.quaternion[0], ellipsoid.quaternion[1], ellipsoid.quaternion[2], ellipsoid.quaternion[3]));
     vec3 rotated_point = rotation * scaled_point;
 
-    vec3 pos = mu + q * rotated_point;
+    // Translate the point by the ellipsoid's mu
+    vec3 mu = vec3(ellipsoid.mu[0], ellipsoid.mu[1], ellipsoid.mu[2]);
+    vec3 pos = mu + ellipsoid.Q * rotated_point;
     
+    // Calculate the color based on the ellipsoid's SH coefficients
+
+    vec3 sh0_color = vec3(clamp(ellipsoid.sh_dc[0] * C0 + 0.5, 0, 1), clamp(ellipsoid.sh_dc[1] * C0 + 0.5, 0, 1), clamp(ellipsoid.sh_dc[2] * C0 + 0.5, 0, 1));
+
+    vec3 sh1_color = vec3(
+        C1 * (ellipsoid.sh_rest[0] * sphere_point.y + ellipsoid.sh_rest[1] * sphere_point.z + ellipsoid.sh_rest[2] * sphere_point.x),
+        C1 * (ellipsoid.sh_rest[3] * sphere_point.y + ellipsoid.sh_rest[4] * sphere_point.z + ellipsoid.sh_rest[5] * sphere_point.x),
+        C1 * (ellipsoid.sh_rest[6] * sphere_point.y + ellipsoid.sh_rest[7] * sphere_point.z + ellipsoid.sh_rest[8] * sphere_point.x)
+    );
+
+    out_color = sh0_color + sh1_color;
+
     gl_Position = projection * view * model * vec4(pos, 1.0);
 }
