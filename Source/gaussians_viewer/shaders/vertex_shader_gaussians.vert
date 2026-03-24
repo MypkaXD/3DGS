@@ -27,6 +27,7 @@ layout(std430, binding = 0) buffer Ellipsoids
 
 #define C0 0.28209479177387814
 #define C1 0.4886025119029199
+#define C2 1.0925484305920792
 
 mat3 quaternion_to_matrix(vec4 q) {
     float x = q.x, y = q.y, z = q.z, w = q.w;
@@ -79,7 +80,33 @@ void main()
         C1 * (ellipsoid.sh_rest[6] * sphere_point.y + ellipsoid.sh_rest[7] * sphere_point.z + ellipsoid.sh_rest[8] * sphere_point.x)
     );
 
-    out_color = sh0_color + sh1_color;
+    float x = sphere_point.x;
+    float y = sphere_point.y;
+    float z = sphere_point.z;
+
+    vec3 sh2_color = vec3(0.0, 0.0, 0.0);
+
+    sh2_color.r += C2 * ellipsoid.sh_rest[9]  * (x*x - y*y);
+    sh2_color.g += C2 * ellipsoid.sh_rest[14] * (x*x - y*y);
+    sh2_color.b += C2 * ellipsoid.sh_rest[19] * (x*x - y*y);
+
+    sh2_color.r += C2 * ellipsoid.sh_rest[10] * (y*z);
+    sh2_color.g += C2 * ellipsoid.sh_rest[15] * (y*z);
+    sh2_color.b += C2 * ellipsoid.sh_rest[20] * (y*z);
+
+    sh2_color.r += C2 * ellipsoid.sh_rest[11] * (3.0*z*z - 1.0);
+    sh2_color.g += C2 * ellipsoid.sh_rest[16] * (3.0*z*z - 1.0);
+    sh2_color.b += C2 * ellipsoid.sh_rest[21] * (3.0*z*z - 1.0);
+
+    sh2_color.r += C2 * ellipsoid.sh_rest[12] * (x*z);
+    sh2_color.g += C2 * ellipsoid.sh_rest[17] * (x*z);
+    sh2_color.b += C2 * ellipsoid.sh_rest[22] * (x*z);
+
+    sh2_color.r += C2 * ellipsoid.sh_rest[13] * (x*y);
+    sh2_color.g += C2 * ellipsoid.sh_rest[18] * (x*y);
+    sh2_color.b += C2 * ellipsoid.sh_rest[23] * (x*y);
+
+    out_color = sh0_color + sh1_color + sh2_color;
 
     gl_Position = projection * view * model * vec4(pos, 1.0);
 }

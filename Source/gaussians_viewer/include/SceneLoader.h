@@ -10,8 +10,6 @@
 
 #include <Ellipsoid.h>
 
-#define C0 0.28209479177387814
-
 class SceneLoader
 {
 private:
@@ -35,13 +33,15 @@ public:
 
 		for (std::size_t idx = 0; idx < n; ++idx)
 		{
-			float sigma_x = dis_sigma(gen);
-			float sigma_y = dis_sigma(gen);
-			float sigma_z = dis_sigma(gen);
+			Ellipsoid e;
 
-			float mu_x = dis_mu(gen);
-			float mu_y = dis_mu(gen);
-			float mu_z = dis_mu(gen);
+			e.mu[0] = dis_mu(gen);
+			e.mu[1] = dis_mu(gen);
+			e.mu[2] = dis_mu(gen);
+
+			e.sigma[0] = dis_sigma(gen);
+			e.sigma[1] = dis_sigma(gen);
+			e.sigma[2] = dis_sigma(gen);
 
 			float x = dis_normal(gen);
 			float y = dis_normal(gen);
@@ -50,23 +50,23 @@ public:
 
 			float norm = std::sqrt(x * x + y * y + z * z + w * w);
 
-			float quaternion_x = x / norm;
-			float quaternion_y = y / norm;
-			float quaternion_z = z / norm;
-			float quaternion_w = w / norm;
+			e.quaternion[0] = x / norm;
+			e.quaternion[1] = y / norm;
+			e.quaternion[2] = z / norm;
+			e.quaternion[3] = w / norm;
 
-			float r = dis_uniform_0_to_1(gen);
-			float g = dis_uniform_0_to_1(gen);
-			float b = dis_uniform_0_to_1(gen);
+			e.sh_dc[0] = 0;
+			e.sh_dc[1] = 0;
+			e.sh_dc[2] = 0;
 
-			//gaussians.emplace_back(
-			//	std::array<float, 3>{ mu_x, mu_y, mu_z },
-			//	std::array<float, 3>{sigma_x, sigma_y, sigma_z},
-			//	std::array<float, 4>{quaternion_x, quaternion_y, quaternion_z, quaternion_w},
-			//	std::array<float, 3>{r,g,b},
-			//	dis_uniform_0_to_1(gen),
-			//	std::sqrt(1.0)
-			//);
+			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
+			{
+				e.sh_rest[idx_sh] = dis_uniform_0_to_1(gen);
+			}
+
+			e.Q = 1.0f;
+
+			gaussians.emplace_back(e);
 		}
 	}
 	void create_scene_from_file(const std::string& path_to_ply)
