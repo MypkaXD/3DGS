@@ -146,7 +146,7 @@ public:
 
 		init_gaussians();
 
-		uv = UV(100, 100, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
+		uv = UV(10, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
 		uv.generate();
 
 		std::vector<AABB> aabb;
@@ -343,7 +343,7 @@ private:
 	void init_gaussians()
 	{
 		// create scene
-		m_loader.create_random_scene(100);
+		m_loader.create_random_scene(10000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");

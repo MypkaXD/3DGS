@@ -55,9 +55,9 @@ public:
 			e.quaternion[2] = z / norm;
 			e.quaternion[3] = w / norm;
 
-			e.sh_dc[0] = 0;
-			e.sh_dc[1] = 0;
-			e.sh_dc[2] = 0;
+			e.sh_dc[0] = dis_uniform_0_to_1(gen);
+			e.sh_dc[1] = dis_uniform_0_to_1(gen);
+			e.sh_dc[2] = dis_uniform_0_to_1(gen);
 
 			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
 			{
