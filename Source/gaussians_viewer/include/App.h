@@ -176,6 +176,17 @@ public:
 
 	void main_loop()
 	{
+
+		std::array<float, 3> bvh_color = { 1.0f, 1.0f, 1.0f};
+		std::array<float, 3> aabb_color = { 1.0f, 1.0f, 1.0f};
+
+		// ambient params
+		std::array<float, 3> ambient_color = { 1.0f, 1.0f, 1.0f};
+		float ambient_strength = 0.1f;
+
+		bool draw_points = false;
+
+
 		while (!glfwWindowShouldClose(m_window))
 		{
 			float currentFrame = static_cast<float>(glfwGetTime());
@@ -191,16 +202,28 @@ public:
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			m_shader_gaussians.use();
-
-			glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
-			glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-			glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
-
 			// draw ellipsoids
-			glBindVertexArray(m_VAO_Gaussians);
-			// glDrawElementsInstanced(GL_POINTS, uv.get_indices().size(), GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
-			glDrawElementsInstanced(GL_TRIANGLES, uv.get_indices().size(), GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
+			{
+				m_shader_gaussians.use();
+
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_gaussians.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+				glUniform3f(glGetUniformLocation(m_shader_gaussians.get_id(), "ambient_color"), ambient_color[0], ambient_color[1], ambient_color[2]);
+				glUniform1f(glGetUniformLocation(m_shader_gaussians.get_id(), "ambient_strength"), ambient_strength);
+
+				glBindVertexArray(m_VAO_Gaussians);
+				if (draw_points)
+				{
+					glDrawElementsInstanced(GL_POINTS, uv.get_indices().size(), GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
+				}
+				else
+				{
+					glDrawElementsInstanced(GL_TRIANGLES, uv.get_indices().size(), GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
+				}
+			}
+
 
 			// draw AABB
 			if (m_draw_aabb) {
@@ -211,6 +234,8 @@ public:
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_aabb.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_aabb.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_aabb.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+				glUniform3f(glGetUniformLocation(m_shader_aabb.get_id(), "color"), aabb_color[0], aabb_color[1], aabb_color[2]);
 
 				glDrawElementsInstanced(GL_LINES, 24, GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
 			}
@@ -225,6 +250,8 @@ public:
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_aabb.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_aabb.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
 
+				glUniform3f(glGetUniformLocation(m_shader_aabb.get_id(), "color"), bvh_color[0], bvh_color[1], bvh_color[2]);
+				
 				glDrawElementsInstanced(GL_LINES, 24, GL_UNSIGNED_INT, 0, m_bvh.size());
 			}
 
@@ -236,8 +263,27 @@ public:
 
 			if (ImGui::Checkbox("Draw AABB", &m_draw_aabb))
 				init_aabb();
+			ImGui::SameLine();
+			ImGui::ColorEdit3("##aabb_color", aabb_color.data(), ImGuiColorEditFlags_NoInputs);
+
+
 			if (ImGui::Checkbox("Draw BVH", &m_draw_bvh))
 				init_bvh();
+			ImGui::SameLine();
+			ImGui::ColorEdit3("##bvh_color", bvh_color.data(), ImGuiColorEditFlags_NoInputs);
+
+			
+			ImGui::Text("Ambient Color:");
+			ImGui::SameLine();
+			ImGui::ColorEdit3("##light_source_color", ambient_color.data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SameLine();
+			ImGui::SliderFloat("Ambient Strength", &ambient_strength, 0.0f, 1.0f);
+
+
+
+			ImGui::Checkbox("Draw points:", &draw_points);
+
+
 			if (ImGui::SliderFloat("Gaussian Q", &m_gaussian_Q, 0.1f, 10.0f))
 			{
 				for (std::size_t idx = 0; idx < m_loader.get_gaussians().size(); ++idx)
@@ -332,18 +378,18 @@ private:
 	void load_shaders()
 	{
 		m_shader_gaussians.create();
-		m_shader_gaussians.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_gaussians.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader.frag", GL_FRAGMENT_SHADER));
+		m_shader_gaussians.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_gaussians.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader_gaussians.frag", GL_FRAGMENT_SHADER));
 		m_shader_gaussians.link();
 
 		m_shader_aabb.create();
-		m_shader_aabb.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_aabb.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader.frag", GL_FRAGMENT_SHADER));
+		m_shader_aabb.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_aabb.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader_aabb.frag", GL_FRAGMENT_SHADER));
 		m_shader_aabb.link();
 	}
 
 	void init_gaussians()
 	{
 		// create scene
-		m_loader.create_random_scene(10000);
+		m_loader.create_random_scene(100);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");

@@ -233,16 +233,31 @@ void create_ellipsoid_without_rotate()
 	double min_theta = 0.0;
 	double max_theta = M_PI;
 
-	std::size_t n = 100;
+	std::size_t n = 20;
 
 	double step_phi = (max_phi - min_phi) / double(n - 1);
 	double step_theta = (max_theta - min_theta) / double(n - 1);
 
-	// double Q = 7.814727903251179; // 95%
-	double Q = 1; // 19.87%
+	double Q = 7.814727903251179; // 95%
+	// double Q = 1; // 19.87%
 
-	std::vector<double> mu = { 10.0, 0.0, 0.0 };
-	std::vector<double> sigma = { 10.0, 2.0, 3.0 };
+	std::vector<double> mu = { 0.0, 0.0, 0.0 };
+	std::vector<double> sigma = { 1.0, 1.0, 1.0 };
+
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	std::uniform_int_distribution<int> dis_mu(-1000, 1000);
+	std::uniform_real_distribution<float> dis_sigma(1, 2);
+	std::normal_distribution<float> dis_normal(0.0f, 1.0f);
+
+	sigma[0] = dis_sigma(gen);
+	sigma[1] = dis_sigma(gen);
+	sigma[2] = dis_sigma(gen);
+
+	mu[0] = dis_mu(gen);
+	mu[1] = dis_mu(gen);
+	mu[2] = dis_mu(gen);
 
 	std::ofstream file("ellipsoid.txt");
 
@@ -285,6 +300,39 @@ void create_ellipsoid_without_rotate()
 				dump3(file, x1, y1, z1);
 				dump3(file, x3, y3, z3);
 				dump3(file, x4, y4, z4);
+				dump3(file, 1.0, 0.0, 0.0);
+				file << "\n";
+			}
+		}
+
+		file << "vectors: normals" << std::endl;
+
+		for (std::size_t i = 0; i < n; ++i)
+		{
+			double phi = min_phi + step_phi * i;
+
+			for (std::size_t j = 0; j < n; ++j)
+			{
+				double theta = min_theta + step_theta * j;
+
+				double sphere_x = std::sin(theta) * std::cos(phi);
+				double sphere_y = std::sin(theta) * std::sin(phi);
+				double sphere_z = std::cos(theta);
+
+				double scaled_x = sphere_x * sigma[0];
+				double scaled_y = sphere_y * sigma[1];
+				double scaled_z = sphere_z * sigma[2];
+
+				double world_x = mu[0] + std::sqrt(Q) * scaled_x;
+				double world_y = mu[1] + std::sqrt(Q) * scaled_y;
+				double world_z = mu[2] + std::sqrt(Q) * scaled_z;
+
+				double nx_local = 2 * sphere_x / (sigma[0]);
+				double ny_local = 2 * sphere_y / (sigma[1]);
+				double nz_local = 2 * sphere_z / (sigma[2]);
+
+				dump3(file, world_x, world_y, world_z);
+				dump3(file, world_x + nx_local, world_y + ny_local, world_z + nz_local);
 				dump3(file, 1.0, 0.0, 0.0);
 				file << "\n";
 			}
@@ -399,11 +447,12 @@ void create_ellipsoid_with_rotate()
 	double min_theta = 0.0;
 	double max_theta = M_PI;
 
-	std::size_t n = 100;
+	std::size_t n = 10;
 	double step_phi = (max_phi - min_phi) / (n - 1);
 	double step_theta = (max_theta - min_theta) / (n - 1);
 
-	double Q = 7.814727903251179; // 95%
+	// double Q = 7.814727903251179; // 95%
+	double Q = 1.0;
 	double sqrtQ = std::sqrt(Q);
 
 	std::random_device rd;
@@ -525,6 +574,60 @@ void create_ellipsoid_with_rotate()
 				dump3(file, world_x1, world_y1, world_z1);
 				dump3(file, world_x3, world_y3, world_z3);
 				dump3(file, world_x4, world_y4, world_z4);
+				dump3(file, 1.0, 0.0, 0.0);
+				file << "\n";
+			}
+		}
+
+		file << "vectors: normals" << std::endl;
+
+		for (std::size_t i = 0; i < n; ++i)
+		{
+			double phi = min_phi + step_phi * i;
+
+			for (std::size_t j = 0; j < n; ++j)
+			{
+				double theta = min_theta + step_theta * j;
+
+				double sphere_x = std::sin(theta) * std::cos(phi);
+				double sphere_y = std::sin(theta) * std::sin(phi);
+				double sphere_z = std::cos(theta);
+
+				double scaled_x = sphere_x * sigma_x;
+				double scaled_y = sphere_y * sigma_y;
+				double scaled_z = sphere_z * sigma_z;
+
+				double world_x = mu_x + sqrtQ * (R[0][0] * scaled_x + R[0][1] * scaled_y + R[0][2] * scaled_z);
+				double world_y = mu_y + sqrtQ * (R[1][0] * scaled_x + R[1][1] * scaled_y + R[1][2] * scaled_z);
+				double world_z = mu_z + sqrtQ * (R[2][0] * scaled_x + R[2][1] * scaled_y + R[2][2] * scaled_z);
+
+				double nx_local = sphere_x / (sigma_x);
+				double ny_local = sphere_y / (sigma_y);
+				double nz_local = sphere_z / (sigma_z);
+
+				double norm_x =
+					R[0][0] * nx_local +
+					R[0][1] * ny_local +
+					R[0][2] * nz_local;
+
+				double norm_y =
+					R[1][0] * nx_local +
+					R[1][1] * ny_local +
+					R[1][2] * nz_local;
+
+				double norm_z =
+					R[2][0] * nx_local +
+					R[2][1] * ny_local +
+					R[2][2] * nz_local;
+
+				double len = std::sqrt(norm_x * norm_x + norm_y * norm_y + norm_z * norm_z);
+
+				norm_x /= len;
+				norm_y /= len;
+				norm_z /= len;
+
+				dump3(file, world_x, world_y, world_z);
+				dump3(file, world_x + norm_x, world_y + norm_y, world_z + norm_z);
 				dump3(file, 1.0, 0.0, 0.0);
 				file << "\n";
 			}

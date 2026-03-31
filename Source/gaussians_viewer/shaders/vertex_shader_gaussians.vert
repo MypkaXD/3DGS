@@ -159,7 +159,8 @@ vec3 get_color(vec3 sphere_point, in Ellipsoid ellipsoid)
             ellipsoid.sh_rest[44] * get_SH_L3_M3(x*(x*x-3*y*y)), 0, 1)
     );
 
-    return sh0_color + sh1_color + sh2_color + sh3_color;
+    // return sh0_color + sh1_color + sh2_color + sh3_color;
+    return sh0_color;
 }
 
 void main()
