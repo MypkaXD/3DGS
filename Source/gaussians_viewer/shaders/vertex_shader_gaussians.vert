@@ -7,6 +7,8 @@ uniform mat4 projection;
 uniform mat4 model;
 
 out vec3 out_color;
+out vec3 out_normal;
+out vec3 frag_pos;
 
 struct Ellipsoid
 {
@@ -159,32 +161,39 @@ vec3 get_color(vec3 sphere_point, in Ellipsoid ellipsoid)
             ellipsoid.sh_rest[44] * get_SH_L3_M3(x*(x*x-3*y*y)), 0, 1)
     );
 
-    // return sh0_color + sh1_color + sh2_color + sh3_color;
-    return sh0_color;
+    // return sh0_color;
+    return sh0_color + sh1_color + sh2_color + sh3_color;
 }
 
 void main()
 {
 
     const Ellipsoid ellipsoid = ellipsoids[gl_InstanceID];
+    
+    vec3 mu = vec3(ellipsoid.mu[0], ellipsoid.mu[1], ellipsoid.mu[2]);
+    vec3 sigma = vec3(ellipsoid.sigma[0], ellipsoid.sigma[1], ellipsoid.sigma[2]);
 
     // Convert spherical coordinates
     vec3 sphere_point = vec3(sin(pos_uv.y) * cos(pos_uv.x), sin(pos_uv.y) * sin(pos_uv.x), cos(pos_uv.y)); // x ~ phi = [0, 2PI], y ~ theta = [0, PI]
 
     // Scale the point by the ellipsoid's sigma
-    vec3 scaled_point = vec3(sphere_point[0] * ellipsoid.sigma[0], sphere_point[1] * ellipsoid.sigma[1], sphere_point[2] * ellipsoid.sigma[2]);
+    vec3 scaled_point = sphere_point * sigma;
 
     // Rotate the point using the ellipsoid's quaternion
     mat3 rotation = quaternion_to_matrix(vec4(ellipsoid.quaternion[0], ellipsoid.quaternion[1], ellipsoid.quaternion[2], ellipsoid.quaternion[3]));
     vec3 rotated_point = rotation * scaled_point;
 
     // Translate the point by the ellipsoid's mu
-    vec3 mu = vec3(ellipsoid.mu[0], ellipsoid.mu[1], ellipsoid.mu[2]);
     vec3 pos = mu + ellipsoid.Q * rotated_point;
     
     // Calculate the color based on the ellipsoid's SH coefficients
-
     out_color = get_color(sphere_point, ellipsoid);
+
+    // Calculate the normal
+    out_normal = normalize((sphere_point / sigma) * transpose(rotation));
+
+    // Calculate fragment pos by interpolation
+    frag_pos = vec3(model * vec4(pos, 1.0));
 
     gl_Position = projection * view * model * vec4(pos, 1.0);
 }

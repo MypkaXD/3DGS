@@ -2,7 +2,7 @@
 #define APP_H
 
 #include <iostream>
-
+#include <chrono>
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -71,6 +71,7 @@ private:
 	// Shaders
 	Shader m_shader_gaussians;
 	Shader m_shader_aabb;
+	Shader m_shader_light_source;
 
 	// Camera settings
 	static Camera m_camera;
@@ -122,6 +123,7 @@ public:
 
 			m_shader_gaussians.~Shader();
 			m_shader_aabb.~Shader();
+			m_shader_light_source.~Shader();
 		}
 
 		ImGui_ImplOpenGL3_Shutdown();
@@ -146,7 +148,7 @@ public:
 
 		init_gaussians();
 
-		uv = UV(10, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
+		uv = UV(100, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
 		uv.generate();
 
 		std::vector<AABB> aabb;
@@ -184,14 +186,27 @@ public:
 		std::array<float, 3> ambient_color = { 1.0f, 1.0f, 1.0f};
 		float ambient_strength = 0.1f;
 
+		// diffuse params
+		std::array<float, 3> light_pos = { 100.0f * std::sin(0) * std::cos(0), 100.0f * std::sin(0) * std::sin(0), 0.0f};
+		std::array<float, 3> light_color = { 1.0f, 1.0f, 1.0f };
+
 		bool draw_points = false;
 
+		auto start_time = std::chrono::high_resolution_clock::now();
+		auto end_time = std::chrono::high_resolution_clock::now();
+		auto fps = 0.0f;
 
 		while (!glfwWindowShouldClose(m_window))
 		{
+
+			start_time = std::chrono::high_resolution_clock::now();
+
 			float currentFrame = static_cast<float>(glfwGetTime());
 			m_delta_time = currentFrame - m_last_frame;
 			m_last_frame = currentFrame;
+
+			light_pos[0] = 100.0f * std::sin(currentFrame) * std::cos(currentFrame);
+			light_pos[1] = 100.0f * std::sin(currentFrame) * std::sin(currentFrame);
 
 			process_input(m_window);
 
@@ -212,6 +227,11 @@ public:
 
 				glUniform3f(glGetUniformLocation(m_shader_gaussians.get_id(), "ambient_color"), ambient_color[0], ambient_color[1], ambient_color[2]);
 				glUniform1f(glGetUniformLocation(m_shader_gaussians.get_id(), "ambient_strength"), ambient_strength);
+				
+				glUniform3f(glGetUniformLocation(m_shader_gaussians.get_id(), "diffuse_pos"), light_pos[0], light_pos[1], light_pos[2]);
+				glUniform3f(glGetUniformLocation(m_shader_gaussians.get_id(), "diffuse_color"), light_color[0], light_color[1], light_color[2]);
+				
+				glUniform3f(glGetUniformLocation(m_shader_gaussians.get_id(), "camera_pos"), m_camera.Position[0], m_camera.Position[1], m_camera.Position[2]);
 
 				glBindVertexArray(m_VAO_Gaussians);
 				if (draw_points)
@@ -221,6 +241,28 @@ public:
 				else
 				{
 					glDrawElementsInstanced(GL_TRIANGLES, uv.get_indices().size(), GL_UNSIGNED_INT, 0, m_loader.get_gaussians().size());
+				}
+			}
+
+			// draw light source
+			{
+				m_shader_light_source.use();
+
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+
+				glUniform3f(glGetUniformLocation(m_shader_light_source.get_id(), "diffuse_pos"), light_pos[0], light_pos[1], light_pos[2]);
+				glUniform3f(glGetUniformLocation(m_shader_light_source.get_id(), "diffuse_color"), light_color[0], light_color[1], light_color[2]);
+
+				glBindVertexArray(m_VAO_Gaussians);
+				if (draw_points)
+				{
+					glDrawElementsInstanced(GL_POINTS, uv.get_indices().size(), GL_UNSIGNED_INT, 0, 1);
+				}
+				else
+				{
+					glDrawElementsInstanced(GL_TRIANGLES, uv.get_indices().size(), GL_UNSIGNED_INT, 0, 1);
 				}
 			}
 
@@ -275,11 +317,13 @@ public:
 			
 			ImGui::Text("Ambient Color:");
 			ImGui::SameLine();
-			ImGui::ColorEdit3("##light_source_color", ambient_color.data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::ColorEdit3("##ambient_color", ambient_color.data(), ImGuiColorEditFlags_NoInputs);
 			ImGui::SameLine();
 			ImGui::SliderFloat("Ambient Strength", &ambient_strength, 0.0f, 1.0f);
 
-
+			ImGui::Text("Color Light Source:");
+			ImGui::SameLine();
+			ImGui::ColorEdit3("##light_source_color", light_color.data(), ImGuiColorEditFlags_NoInputs);
 
 			ImGui::Checkbox("Draw points:", &draw_points);
 
@@ -288,7 +332,7 @@ public:
 			{
 				for (std::size_t idx = 0; idx < m_loader.get_gaussians().size(); ++idx)
 				{
-					m_loader.get_gaussians()[idx].Q = m_gaussian_Q;
+					m_loader.get_gaussians()[idx].Q = std::sqrt(m_gaussian_Q);
 				}
 
 				glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_Gaussians);
@@ -297,10 +341,20 @@ public:
 			}
 			ImGui::End();
 
+			ImGui::Text("FPS: %lf", fps);
+
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 			glfwSwapBuffers(m_window);
+			
+			glFinish();
+			end_time = std::chrono::high_resolution_clock::now();
+
+			fps = 1.0f / std::chrono::duration<float>(end_time - start_time).count();
+			
 			glfwPollEvents();
+
+
 		}
 	}
 
@@ -346,6 +400,8 @@ private:
 			return false;
 		}
 
+		// glfwSwapInterval(0); // disable VSync
+
 		set_callbacks();
 
 		return true;
@@ -384,6 +440,10 @@ private:
 		m_shader_aabb.create();
 		m_shader_aabb.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_aabb.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader_aabb.frag", GL_FRAGMENT_SHADER));
 		m_shader_aabb.link();
+
+		m_shader_light_source.create();
+		m_shader_light_source.load_shaders(std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\vertex_shader_light_source.vert", GL_VERTEX_SHADER), std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\shaders\\fragment_shader_light_source.frag", GL_FRAGMENT_SHADER));
+		m_shader_light_source.link();
 	}
 
 	void init_gaussians()

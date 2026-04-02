@@ -191,6 +191,9 @@ void create_4D() {
 			}
 		}
 
+		double a = 1.0;
+		double b = 5.0;
+
 		file << "points: gaussians_4D" << std::endl;
 
 		for (std::size_t idx_i = 0; idx_i < n; ++idx_i)
@@ -200,16 +203,21 @@ void create_4D() {
 				for (std::size_t idx_k = 0; idx_k < n; ++idx_k)
 				{
 					auto p = &points[idx_i * n * n + idx_j * n + idx_k];
-					double v = 1.0 + (std::get<3>(*p) - min_v) / (max_v - min_v);
+					double v = std::get<3>(*p) * (b - a) / (max_v - min_v) + a - min_v * (b - a) / (max_v - min_v);
 
 					double eps = 0.01;
 
-					if (v < 1.2 - eps || v > 1.2 + eps)
-						continue;
-
 					dump3(file, std::get<0>(*p), std::get<1>(*p), std::get<2>(*p));
 					file << v;
-					dump3(file, 1.0, 0.0, 0.0);
+					
+					if (v < 3.0 - eps || v > 3.0 + eps)
+					{
+						dump3(file, 1.0, 0.0, 0.0);
+					}
+					else
+					{
+						dump3(file, 1.0, 1.0, 1.0);
+					}
 					file << std::endl;
 				}
 			}
@@ -447,7 +455,7 @@ void create_ellipsoid_with_rotate()
 	double min_theta = 0.0;
 	double max_theta = M_PI;
 
-	std::size_t n = 10;
+	std::size_t n = 25;
 	double step_phi = (max_phi - min_phi) / (n - 1);
 	double step_theta = (max_theta - min_theta) / (n - 1);
 
@@ -673,9 +681,9 @@ int main()
 
 	// create_2D();
 	// create_3D();
-	// create_4D();
+	create_4D();
 	// create_ellipsoid_without_rotate();
-	create_ellipsoid_with_rotate();
+	// create_ellipsoid_with_rotate();
 
 	return 0;
 }
