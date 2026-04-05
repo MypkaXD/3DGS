@@ -1,6 +1,58 @@
 #version 430
 
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(rgba32f, binding = 0) uniform image2D out_tex;
+
+uniform vec3 light_source;
+uniform vec3 sphere_center;
+
 void main()
 {
+	
+	float r = 0.5;
 
+	vec4 pixel_color = vec4(0.0, 1.0, 1.0, 1.0);
+
+	ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = imageSize(out_tex);
+
+	vec2 norm = vec2(float(pos.x) * 2.0 / size.x - 1.0, 1.0 - float(pos.y) * 2.0 / size.y);
+
+	vec3 camera = vec3(0.0, 0.0, -10.0);
+	vec3 dir = normalize(vec3(norm, 0.0) - camera);
+	
+	float a = dot(dir, dir);
+	float b = 2.0 * dot((camera - sphere_center), dir);
+	float c = dot(camera - sphere_center, camera - sphere_center) - r * r;
+
+	float discriminant = b * b - 4.0 * a * c;
+
+	if (discriminant >= 0.0)
+	{
+		pixel_color = vec4(1.0, 0.0, 0.0, 1.0);
+	}
+	else
+	{
+		float z_plane = sphere_center.z + r;
+
+		float x = norm.x * z_plane / camera.z;
+		float y = norm.y * z_plane / camera.z;
+
+		vec3 point_on_plane = vec3(x, y, z_plane);
+
+		vec3 light_dir = normalize(light_source - point_on_plane);
+
+		a = dot(light_dir, light_dir);
+		b = 2.0 * dot((point_on_plane - sphere_center), light_dir);
+		c = dot(point_on_plane - sphere_center, point_on_plane - sphere_center) - r * r;
+
+		discriminant = b * b - 4.0 * a * c;
+
+		if (discriminant >= 0.0)
+		{
+			pixel_color = vec4(pixel_color.x * 0.5, pixel_color.y * 0.5, pixel_color.z * 0.5, 1.0);
+		}
+	}
+
+	imageStore(out_tex, pos, pixel_color);
 }
