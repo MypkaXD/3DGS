@@ -1,9 +1,10 @@
 #ifndef BVH_H
 #define BVH_H
 
+#define DEBUG
+
 #include <AABB.h>
 
-#include <stack>
 #include <vector>
 
 #ifdef DEBUG
@@ -90,30 +91,6 @@ void create_gpu_bvh(const auto& bvh, BVHGPU& bvh_gpu)
 	}
 }
 
-int max_depth = 0;
-
-void get_depth_iterative(const bvh::v2::Bvh<Node>& bvh, int start_index = 0)
-{
-	std::stack<std::pair<unsigned int, int>> stack;
-	stack.push({ start_index, 0 });
-
-	while (!stack.empty())
-	{
-		auto [idx, depth] = stack.top();
-		stack.pop();
-
-		if (depth > max_depth)
-			max_depth = depth;
-
-		const auto& node = bvh.nodes[idx];
-		if (!node.is_leaf())
-		{
-			stack.push({ node.index.first_id(), depth + 1 });
-			stack.push({ node.index.first_id() + 1, depth + 1 });
-		}
-	}
-}
-
 void create_bvh(std::vector<AABB>& aabb, std::vector<AABB>& bvh_boxes, BVHGPU& bvh_gpu)
 {
 	std::vector<BBox> bboxes;
@@ -148,9 +125,6 @@ void create_bvh(std::vector<AABB>& aabb, std::vector<AABB>& bvh_boxes, BVHGPU& b
 	config.max_leaf_size = 8;
 
 	auto bvh = bvh::v2::DefaultBuilder<Node>::build(bboxes, centers, config);
-
-	get_depth_iterative(bvh);
-	std::cout << "Max depth of BVH: " << max_depth << std::endl;
 
 	create_gpu_bvh(bvh, bvh_gpu);
 

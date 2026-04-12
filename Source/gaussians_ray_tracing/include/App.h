@@ -26,7 +26,6 @@
 #include <BVH.h>
 #include <Camera.h>
 #include <Shader.h>
-#include <Uniforms.h>
 
 class App
 {
@@ -51,6 +50,9 @@ private:
 	// Timing
 	static float m_delta_time;	// time between current frame and last frame
 	static float m_last_frame;
+
+	float m_gaussian_Q = 1.0f;
+
 
 	unsigned int m_VAO_draw_texture;
 	unsigned int m_VBO_draw_texture;
@@ -168,19 +170,16 @@ public:
 		glGenVertexArrays(1, &m_VAO_gaussians);
 		glBindVertexArray(m_VAO_gaussians);
 
-		std::cout << sizeof(Ellipsoid::EllipsoidGeneral) << std::endl;
-		std::cout << sizeof(Ellipsoid::EllipsoidAdditional) << std::endl;
-
 		glGenBuffers(1, &m_SSBO_gaussians_general);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_general);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_general().size() * sizeof(Ellipsoid::EllipsoidGeneral), m_loader.get_gaussians_general().data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_SSBO_gaussians_general);
-			
+
 		glGenBuffers(1, &m_SSBO_gaussians_additional);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_additional);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_additional().size() * sizeof(Ellipsoid::EllipsoidAdditional), m_loader.get_gaussians_additional().data(), GL_STATIC_DRAW);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_additional().size() * sizeof(Ellipsoid::EllipsoidAddtitional), m_loader.get_gaussians_additional().data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_gaussians_additional);
-
+			
 		glGenBuffers(1, &m_SSBO_bvh_nodes);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_bvh_nodes);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_bvh_gpu.nodes.size() * sizeof(BVHNodeGPU), m_bvh_gpu.nodes.data(), GL_STATIC_DRAW);
@@ -352,12 +351,12 @@ private:
 	void init_gaussians()
 	{
 		// create scene
-		// m_loader.create_random_scene(1000);
+		// m_loader.create_random_scene(100000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
-		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
 
-		std::cout << m_loader.get_gaussians_general().size() << " gaussians loaded." << std::endl;
+		std::cout << m_loader.get_gaussians_count() << " gaussians loaded." << std::endl;
 
 	}
 

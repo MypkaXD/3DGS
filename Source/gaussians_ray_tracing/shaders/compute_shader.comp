@@ -5,18 +5,17 @@ layout(rgba32f, binding = 0) uniform image2D out_tex;
 
 struct EllipsoidGeneral
 {
-    vec3 mu;
-    vec3 sigma;
-    mat3 rotation;
-    mat3 inverse_covariance;
+	vec4 mu;
+	vec4 sigma;
+	mat4 rotation;
+	mat4 covariance_invariant;
 };
 
-struct EllipsoidAdditional
+struct EllipsoidAddtitional
 {
-    
-    float sh_main[3];
-    float sh_rest[45];
-    float opacity;
+	vec4 sh_main;
+	vec4 sh_add[15];
+	float opacity;
 };
 
 struct BVH_Node
@@ -32,12 +31,12 @@ struct BVH_Node
 
 layout(std430, binding = 1) buffer EllipsoidsGeneral
 {
-    EllipsoidGeneral ellipsoids_gen[];
+    EllipsoidGeneral ellipsoid_general[];
 };
 
-layout(std430, binding = 2) buffer EllipsoidsAdditional
+layout(std430, binding = 2) buffer EllipsoidsAddtitional
 {
-    EllipsoidAdditional ellipsoids_add[];
+    EllipsoidAddtitional ellipsoid_addtitional[];
 };
 
 layout(std430, binding = 3) buffer BVH_Nodes
@@ -100,10 +99,10 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
             for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
             {
                 uint ell_idx = prim_ids[i];
-                EllipsoidGeneral ell_gen = ellipsoids_gen[ell_idx];
+                EllipsoidGeneral ell_gen = ellipsoid_general[ell_idx];
         
-                vec3 oc = ray_origin - ell_gen.mu;
-                mat3 temp = ell_gen.inverse_covariance;
+                vec3 oc = ray_origin - ell_gen.mu.xyz;
+                mat3 temp = mat3(ell_gen.covariance_invariant);
                 float a = dot(ray_dir, temp * ray_dir);
                 float b = 2.0 * dot(oc, temp * ray_dir);
                 float c = dot(oc, temp * oc) - Q;
@@ -127,7 +126,7 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
             
                     if (t > 0.0)
                     {
-                        EllipsoidAdditional ell_add = ellipsoids_add[ell_idx];
+                        EllipsoidAddtitional ell_add = ellipsoid_addtitional[ell_idx];
                         vec3 sh0_color = vec3(
                             clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1), 
                             clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1), 
@@ -168,7 +167,7 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(1.0, 0.0, 0.0, 1.0);
+    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
 
     traverse_bvh(camera_pos, ray_dir, pixel_color);
     

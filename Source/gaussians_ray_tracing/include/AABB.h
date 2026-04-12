@@ -5,6 +5,8 @@
 #include <utility>
 #include <cmath>
 
+#include <Ellipsoid.h>
+
 struct AABB
 {
     glm::vec3 center;
@@ -14,11 +16,11 @@ struct AABB
 		: center(center), extent(extent) {
 	}
 
-    AABB(const Ellipsoid::EllipsoidGeneral& e, float Q)
+    AABB(const Ellipsoid::EllipsoidGeneral& ellipsoid, const float Q)
     {
-        auto x = calculate_global_coord(e, Q, 0);
-        auto y = calculate_global_coord(e, Q, 1);
-        auto z = calculate_global_coord(e, Q, 2);
+        auto x = calculate_global_coord(ellipsoid, Q, 0);
+        auto y = calculate_global_coord(ellipsoid, Q, 1);
+        auto z = calculate_global_coord(ellipsoid, Q, 2);
 
         float x_max = x.first.x;
         float y_max = y.first.y;
@@ -40,29 +42,31 @@ struct AABB
 
 private:
 
-    glm::vec3 calculate_local_coord(const Ellipsoid::EllipsoidGeneral& e, const float Q, const std::size_t idx)
+    glm::vec3 calculate_local_coord(const Ellipsoid::EllipsoidGeneral& ellipsoid, const float Q, const std::size_t idx)
     {
         float denominator =
             std::sqrt(
-                e.rotation[0][idx] * e.rotation[0][idx] * e.sigma[0] * e.sigma[0] +
-                e.rotation[1][idx] * e.rotation[1][idx] * e.sigma[1] * e.sigma[1] +
-                e.rotation[2][idx] * e.rotation[2][idx] * e.sigma[2] * e.sigma[2]
+                ellipsoid.rotation[0][idx] * ellipsoid.rotation[0][idx] * ellipsoid.sigma[0] * ellipsoid.sigma[0] +
+                ellipsoid.rotation[1][idx] * ellipsoid.rotation[1][idx] * ellipsoid.sigma[1] * ellipsoid.sigma[1] +
+                ellipsoid.rotation[2][idx] * ellipsoid.rotation[2][idx] * ellipsoid.sigma[2] * ellipsoid.sigma[2]
             );
 
-        float local_x = (e.rotation[0][idx] * e.sigma[0] * e.sigma[0] * std::sqrt(Q)) / denominator;
-        float local_y = (e.rotation[1][idx] * e.sigma[1] * e.sigma[1] * std::sqrt(Q)) / denominator;
-        float local_z = (e.rotation[2][idx] * e.sigma[2] * e.sigma[2] * std::sqrt(Q)) / denominator;
+        float local_x = (ellipsoid.rotation[0][idx] * ellipsoid.sigma[0] * ellipsoid.sigma[0] * std::sqrt(Q)) / denominator;
+        float local_y = (ellipsoid.rotation[1][idx] * ellipsoid.sigma[1] * ellipsoid.sigma[1] * std::sqrt(Q)) / denominator;
+        float local_z = (ellipsoid.rotation[2][idx] * ellipsoid.sigma[2] * ellipsoid.sigma[2] * std::sqrt(Q)) / denominator;
 
         return glm::vec3(local_x, local_y, local_z);
     }
 
-    std::pair<glm::vec3, glm::vec3> calculate_global_coord(const Ellipsoid::EllipsoidGeneral& e, const float Q, const std::size_t idx)
+    std::pair<glm::vec3, glm::vec3> calculate_global_coord(const Ellipsoid::EllipsoidGeneral& ellipsoid, const float Q, const std::size_t idx)
     {
-        glm::vec3 local = calculate_local_coord(e, Q, idx);
+        glm::vec3 local = calculate_local_coord(ellipsoid, Q, idx);
+
+		glm::vec3 mu = glm::vec3(ellipsoid.mu[0], ellipsoid.mu[1], ellipsoid.mu[2]);
 
         return {
-            e.rotation * local + e.mu,
-            e.rotation * (-local) + e.mu
+            glm::mat3(ellipsoid.rotation) * local + mu,
+            glm::mat3(ellipsoid.rotation) * (-local) + mu
         };
     }
 };
