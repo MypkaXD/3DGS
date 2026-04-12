@@ -17,14 +17,17 @@ private:
 	std::vector<Ellipsoid::EllipsoidAdditional> gaussians_additional;
 public:
 
-	SceneLoader() { }
+	SceneLoader() {}
 
 	void create_random_scene(const std::size_t n)
 	{
 		std::random_device rd;
 		std::mt19937 gen(rd());
 
-		std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+		std::uniform_int_distribution<int> dis_mu(-100, 100);
+		std::uniform_real_distribution<float> dis_sigma(1, 5);
+		std::normal_distribution<float> dis_normal(0.0f, 1.0f);
+		std::uniform_real_distribution<float> dis_uniform_0_to_1(0.0f, 1.0f);
 
 		gaussians_general.clear();
 		gaussians_additional.clear();
@@ -36,42 +39,42 @@ public:
 
 		for (std::size_t idx = 0; idx < n; ++idx)
 		{
-			float x = dis(gen);
-			float y = dis(gen);
-			float z = dis(gen);
-			float w = dis(gen);
+			float x = dis_normal(gen);
+			float y = dis_normal(gen);
+			float z = dis_normal(gen);
+			float w = dis_normal(gen);
 
 			float norm = std::sqrt(x * x + y * y + z * z + w * w);
 
 			Ellipsoid::EllipsoidAdditional e_add;
 
-			e_add.sh_main[0] = dis(gen);
-			e_add.sh_main[1] = dis(gen);
-			e_add.sh_main[2] = dis(gen);
+			e_add.sh_main[0] = dis_uniform_0_to_1(gen);
+			e_add.sh_main[1] = dis_uniform_0_to_1(gen);
+			e_add.sh_main[2] = dis_uniform_0_to_1(gen);
 
 			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
 			{
-				e_add.sh_rest[idx_sh] = dis(gen);
+				e_add.sh_rest[idx_sh] = dis_uniform_0_to_1(gen);
 			}
 
-			e_add.opacity = dis(gen);
+			e_add.opacity = dis_uniform_0_to_1(gen);
 
 			glm::mat3 rotation = calculate_rotation_matrix(x / norm, y / norm, z / norm, w / norm); // rotation
-			glm::vec3 sigma = glm::vec3(dis(gen) + 1.0f, dis(gen) + 1.0f, dis(gen) + 1.0f); // sigma
-			glm::vec3 mu = glm::vec3(dis(gen) * 1000, dis(gen) * 1000, dis(gen) * 1000); // mu
-			
+			glm::vec3 sigma = glm::vec3(dis_sigma(gen), dis_sigma(gen), dis_sigma(gen)); // sigma
+			glm::vec3 mu = glm::vec3(dis_mu(gen), dis_mu(gen), dis_mu(gen)); // mu
+
 			glm::mat3 inverse_sigma_squared = glm::mat3(
 				1.0f / (sigma.x * sigma.x), 0.0f, 0.0f,
 				0.0f, 1.0f / (sigma.y * sigma.y), 0.0f,
 				0.0f, 0.0f, 1.0f / (sigma.z * sigma.z)
 			);
 
-			gaussians_general.emplace_back(
-				mu, // mu
-				sigma, // sigma
-				rotation, // rotation
-				rotation * inverse_sigma_squared * glm::transpose(rotation) // inverse covariance
-			);
+			//gaussians_general.emplace_back(
+			//	mu, // mu
+			//	sigma, // sigma
+			//	rotation, // rotation
+			//	rotation * inverse_sigma_squared * glm::transpose(rotation) // inverse covariance
+			//);
 			gaussians_additional.emplace_back(e_add);
 		}
 	}
@@ -169,6 +172,7 @@ public:
 		for (std::size_t idx = 0; idx < xyz->count; ++idx)
 		{
 			Ellipsoid::EllipsoidAdditional e_add;
+			Ellipsoid::EllipsoidGeneral e_gen;
 
 			e_add.sh_main[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
 			e_add.sh_main[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
@@ -199,11 +203,13 @@ public:
 				0.0f, 0.0f, 1.0f / (sigma.z * sigma.z)
 			);
 
+			e_gen.mu = mu;
+			e_gen.sigma = sigma;
+			e_gen.rotation = rotation;
+			e_gen.inverse_covariance = rotation * inverse_sigma_squared * glm::transpose(rotation);
+
 			gaussians_general.emplace_back(
-				mu,
-				sigma,
-				rotation,
-				rotation* inverse_sigma_squared* glm::transpose(rotation)
+				e_gen
 			);
 			gaussians_additional.emplace_back(e_add);
 		}
@@ -216,10 +222,22 @@ private:
 
 	glm::mat3 calculate_rotation_matrix(const float x, const float y, const float z, const float w)
 	{
+		float xx = x * x;
+		float xy = x * y;
+		float xz = x * z;
+		float xw = x * w;
+
+		float yy = y * y;
+		float yz = y * z;
+		float yw = y * w;
+
+		float zz = z * z;
+		float zw = z * w;
+
 		return glm::mat3{
-			{1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)},
-			{2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)},
-			{2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)}
+			1.0 - 2.0 * (yy + zz), 2.0 * (xy - zw), 2.0 * (xz + yw),
+			2.0 * (xy + zw), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - xw),
+			2.0 * (xz - yw), 2.0 * (yz + xw), 1.0 - 2.0 * (xx + yy)
 		};
 	}
 

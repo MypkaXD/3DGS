@@ -86,7 +86,7 @@ public:
 
 	void set_vec3(const unsigned int location, const glm::vec3& value) const
 	{
-		glUniform3fv(location, 1, glm::value_ptr(value));
+		glUniform3f(location, value.x, value.y, value.z);
 	}
 
 	void set_int(const unsigned int location, int value) const

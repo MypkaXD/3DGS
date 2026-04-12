@@ -133,7 +133,7 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                             clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1), 
                             clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
                         );
-                        pixel_color.rgb += sh0_color;
+                        pixel_color.rgb += sh0_color * ell_add.opacity;
                     }
                 }
             }
@@ -168,7 +168,7 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 pixel_color = vec4(1.0, 0.0, 0.0, 1.0);
 
     traverse_bvh(camera_pos, ray_dir, pixel_color);
     

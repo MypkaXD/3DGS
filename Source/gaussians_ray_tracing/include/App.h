@@ -168,6 +168,9 @@ public:
 		glGenVertexArrays(1, &m_VAO_gaussians);
 		glBindVertexArray(m_VAO_gaussians);
 
+		std::cout << sizeof(Ellipsoid::EllipsoidGeneral) << std::endl;
+		std::cout << sizeof(Ellipsoid::EllipsoidAdditional) << std::endl;
+
 		glGenBuffers(1, &m_SSBO_gaussians_general);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_general);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_general().size() * sizeof(Ellipsoid::EllipsoidGeneral), m_loader.get_gaussians_general().data(), GL_STATIC_DRAW);
@@ -189,14 +192,13 @@ public:
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_SSBO_bvh_ids);
 		glBindVertexArray(0);
 
-		Uniforms::camera_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_pos");
-		Uniforms::camera_front_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_front");
-		Uniforms::camera_right_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_right");
-		Uniforms::camera_up_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_up");
-		Uniforms::fov_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "fov");
-		Uniforms::aspect_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "aspect");
-		Uniforms::compute_texure = glGetUniformLocation(m_shader_texture_draw.get_id(), "compute_texture");
-		Uniforms::Q_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "Q");
+		GLint camera_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_pos");
+		GLint camera_front_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_front");
+		GLint camera_right_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_right");
+		GLint camera_up_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_up");
+		GLint fov_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "fov");
+		GLint aspect_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "aspect");
+		GLint Q_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "Q");
 
 		while (!glfwWindowShouldClose(m_window))
 		{
@@ -209,19 +211,23 @@ public:
 
 			process_input(m_window);
 
+			//glm::mat4 view = m_camera.get_view_matrix(); // camera matrix
+			//glm::mat4 projection = glm::perspective(glm::radians(m_camera.Zoom), (float)m_width / (float)m_height, 0.1f, 1000.0f); // projection matrix
+			//glm::mat4 model = glm::mat4(1.0f); // model matrix
+
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			m_shader_compute_gaussian.use();
 			glBindVertexArray(m_VAO_gaussians);
-			m_shader_compute_gaussian.set_vec3(Uniforms::camera_pos_loc, m_camera.Position);
-			m_shader_compute_gaussian.set_vec3(Uniforms::camera_front_loc, m_camera.Front);
-			m_shader_compute_gaussian.set_vec3(Uniforms::camera_right_loc, m_camera.Right);
-			m_shader_compute_gaussian.set_vec3(Uniforms::camera_up_loc, m_camera.Up);
-			m_shader_compute_gaussian.set_float(Uniforms::fov_loc, m_camera.Zoom);
+			glUniform3f(camera_pos_loc, m_camera.Position.x, m_camera.Position.y, m_camera.Position.z);
+			glUniform3f(camera_front_loc, m_camera.Front.x, m_camera.Front.y, m_camera.Front.z);
+			glUniform3f(camera_right_loc, m_camera.Right.x, m_camera.Right.y, m_camera.Right.z);
+			glUniform3f(camera_up_loc, m_camera.Up.x, m_camera.Up.y, m_camera.Up.z);
+			glUniform1f(fov_loc, m_camera.Zoom);
 			float aspect = (float)m_width / (float)m_height;
-			m_shader_compute_gaussian.set_float(Uniforms::aspect_loc, aspect);
-			m_shader_compute_gaussian.set_float(Uniforms::Q_loc, Ellipsoid::Q);
+			glUniform1f(aspect_loc, aspect);
+			glUniform1f(Q_loc, Ellipsoid::Q);
 			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -229,13 +235,13 @@ public:
 			glBindVertexArray(m_VAO_draw_texture);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, m_texture_draw);
-			m_shader_texture_draw.set_int(Uniforms::compute_texure, 0);
+			glUniform1i(glGetUniformLocation(m_shader_texture_draw.get_id(), "compute_texture"), 0);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
-			
+
 			ImGui::Begin("Settings");
 
 			ImGui::Text("FPS: %lf", fps);
@@ -245,13 +251,15 @@ public:
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 			glfwSwapBuffers(m_window);
-			
+
 			glFinish();
 			end_time = std::chrono::high_resolution_clock::now();
 
 			fps = 1.0f / std::chrono::duration<float>(end_time - start_time).count();
-			
+
 			glfwPollEvents();
+
+
 		}
 	}
 
@@ -344,9 +352,9 @@ private:
 	void init_gaussians()
 	{
 		// create scene
-		m_loader.create_random_scene(1000);
+		// m_loader.create_random_scene(1000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
 
 		std::cout << m_loader.get_gaussians_general().size() << " gaussians loaded." << std::endl;
