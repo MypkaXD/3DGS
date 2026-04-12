@@ -14,14 +14,11 @@ struct AABB
 		: center(center), extent(extent) {
 	}
 
-    AABB(const glm::mat3& R,
-        const glm::vec3& mu,
-        const glm::vec3& sigma,
-        float Q)
+    AABB(const Ellipsoid::EllipsoidGeneral& e, float Q)
     {
-        auto x = calculate_global_coord(R, mu, sigma, Q, 0);
-        auto y = calculate_global_coord(R, mu, sigma, Q, 1);
-        auto z = calculate_global_coord(R, mu, sigma, Q, 2);
+        auto x = calculate_global_coord(e, Q, 0);
+        auto y = calculate_global_coord(e, Q, 1);
+        auto z = calculate_global_coord(e, Q, 2);
 
         float x_max = x.first.x;
         float y_max = y.first.y;
@@ -43,37 +40,29 @@ struct AABB
 
 private:
 
-    glm::vec3 calculate_local_coord(const glm::mat3& R,
-        const glm::vec3& sigma,
-        float Q,
-        std::size_t idx)
+    glm::vec3 calculate_local_coord(const Ellipsoid::EllipsoidGeneral& e, const float Q, const std::size_t idx)
     {
         float denominator =
             std::sqrt(
-                R[0][idx] * R[0][idx] * sigma[0] * sigma[0] +
-                R[1][idx] * R[1][idx] * sigma[1] * sigma[1] +
-                R[2][idx] * R[2][idx] * sigma[2] * sigma[2]
+                e.rotation[0][idx] * e.rotation[0][idx] * e.sigma[0] * e.sigma[0] +
+                e.rotation[1][idx] * e.rotation[1][idx] * e.sigma[1] * e.sigma[1] +
+                e.rotation[2][idx] * e.rotation[2][idx] * e.sigma[2] * e.sigma[2]
             );
 
-        float local_x = (R[0][idx] * sigma[0] * sigma[0] * std::sqrt(Q)) / denominator;
-        float local_y = (R[1][idx] * sigma[1] * sigma[1] * std::sqrt(Q)) / denominator;
-        float local_z = (R[2][idx] * sigma[2] * sigma[2] * std::sqrt(Q)) / denominator;
+        float local_x = (e.rotation[0][idx] * e.sigma[0] * e.sigma[0] * std::sqrt(Q)) / denominator;
+        float local_y = (e.rotation[1][idx] * e.sigma[1] * e.sigma[1] * std::sqrt(Q)) / denominator;
+        float local_z = (e.rotation[2][idx] * e.sigma[2] * e.sigma[2] * std::sqrt(Q)) / denominator;
 
         return glm::vec3(local_x, local_y, local_z);
     }
 
-    std::pair<glm::vec3, glm::vec3> calculate_global_coord(
-        const glm::mat3& R,
-        const glm::vec3& mu,
-        const glm::vec3& sigma,
-        float Q,
-        std::size_t idx)
+    std::pair<glm::vec3, glm::vec3> calculate_global_coord(const Ellipsoid::EllipsoidGeneral& e, const float Q, const std::size_t idx)
     {
-        glm::vec3 local = calculate_local_coord(R, sigma, Q, idx);
+        glm::vec3 local = calculate_local_coord(e, Q, idx);
 
         return {
-            R * local + mu,
-            R * (-local) + mu
+            e.rotation * local + e.mu,
+            e.rotation * (-local) + e.mu
         };
     }
 };
@@ -95,41 +84,14 @@ unsigned int AABB::cube_indices[24] = {
     0,4, 1,5, 2,6, 3,7
 };
 
-void generate_AABB_from_gaussians(const std::vector<Ellipsoid>& gaussians, std::vector<AABB>& aabb)
+void generate_AABB_from_gaussians(const std::vector<Ellipsoid::EllipsoidGeneral>& gaussians, std::vector<AABB>& aabb)
 {
     aabb.clear();
     aabb.reserve(gaussians.size());
 
     for (std::size_t idx = 0; idx < gaussians.size(); ++idx)
     {
-
-        float x = gaussians[idx].quaternion[0];
-        float y = gaussians[idx].quaternion[1];
-        float z = gaussians[idx].quaternion[2];
-        float w = gaussians[idx].quaternion[3];
-
-        float xx = x * x;
-        float xy = x * y;
-        float xz = x * z;
-        float xw = x * w;
-
-        float yy = y * y;
-        float yz = y * z;
-        float yw = y * w;
-
-        float zz = z * z;
-        float zw = z * w;
-
-        glm::mat3 R = glm::mat3{
-            1.0 - 2.0 * (yy + zz), 2.0 * (xy - zw), 2.0 * (xz + yw),
-            2.0 * (xy + zw), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - xw),
-            2.0 * (xz - yw), 2.0 * (yz + xw), 1.0 - 2.0 * (xx + yy)
-        };
-
-        glm::vec3 mu = glm::vec3{ gaussians[idx].mu[0], gaussians[idx].mu[1], gaussians[idx].mu[2] };
-        glm::vec3 sigma = glm::vec3{ gaussians[idx].sigma[0], gaussians[idx].sigma[1], gaussians[idx].sigma[2] };
-
-        aabb.emplace_back(R, mu, sigma, 7.91);
+        aabb.emplace_back(gaussians[idx], Ellipsoid::Q);
     }
 }
 

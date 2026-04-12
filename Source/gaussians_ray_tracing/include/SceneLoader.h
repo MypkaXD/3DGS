@@ -13,7 +13,8 @@
 class SceneLoader
 {
 private:
-	std::vector<Ellipsoid> gaussians;
+	std::vector<Ellipsoid::EllipsoidGeneral> gaussians_general;
+	std::vector<Ellipsoid::EllipsoidAdditional> gaussians_additional;
 public:
 
 	SceneLoader() { }
@@ -23,54 +24,58 @@ public:
 		std::random_device rd;
 		std::mt19937 gen(rd());
 
-		std::uniform_int_distribution<int> dis_mu(-100, 100);
-		std::uniform_real_distribution<float> dis_sigma(1, 5);
-		std::normal_distribution<float> dis_normal(0.0f, 1.0f);
-		std::uniform_real_distribution<float> dis_uniform_0_to_1(0.0f, 1.0f);
+		std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
 
-		gaussians.clear();
-		gaussians.reserve(n);
+		gaussians_general.clear();
+		gaussians_additional.clear();
+
+		gaussians_general.reserve(n);
+		gaussians_additional.reserve(n);
+
+		Ellipsoid::Q = 1.0f;
 
 		for (std::size_t idx = 0; idx < n; ++idx)
 		{
-			Ellipsoid e;
-
-			e.mu[0] = dis_mu(gen);
-			e.mu[1] = dis_mu(gen);
-			e.mu[2] = dis_mu(gen);
-
-			e.sigma[0] = dis_sigma(gen);
-			e.sigma[1] = dis_sigma(gen);
-			e.sigma[2] = dis_sigma(gen);
-
-			float x = dis_normal(gen);
-			float y = dis_normal(gen);
-			float z = dis_normal(gen);
-			float w = dis_normal(gen);
+			float x = dis(gen);
+			float y = dis(gen);
+			float z = dis(gen);
+			float w = dis(gen);
 
 			float norm = std::sqrt(x * x + y * y + z * z + w * w);
 
-			e.quaternion[0] = x / norm;
-			e.quaternion[1] = y / norm;
-			e.quaternion[2] = z / norm;
-			e.quaternion[3] = w / norm;
+			Ellipsoid::EllipsoidAdditional e_add;
 
-			e.sh_dc[0] = dis_uniform_0_to_1(gen);
-			e.sh_dc[1] = dis_uniform_0_to_1(gen);
-			e.sh_dc[2] = dis_uniform_0_to_1(gen);
+			e_add.sh_main[0] = dis(gen);
+			e_add.sh_main[1] = dis(gen);
+			e_add.sh_main[2] = dis(gen);
 
 			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
 			{
-				e.sh_rest[idx_sh] = dis_uniform_0_to_1(gen);
+				e_add.sh_rest[idx_sh] = dis(gen);
 			}
 
-			e.Q = 1.0f;
+			e_add.opacity = dis(gen);
 
-			e.opacity = dis_uniform_0_to_1(gen);
+			glm::mat3 rotation = calculate_rotation_matrix(x / norm, y / norm, z / norm, w / norm); // rotation
+			glm::vec3 sigma = glm::vec3(dis(gen) + 1.0f, dis(gen) + 1.0f, dis(gen) + 1.0f); // sigma
+			glm::vec3 mu = glm::vec3(dis(gen) * 1000, dis(gen) * 1000, dis(gen) * 1000); // mu
+			
+			glm::mat3 inverse_sigma_squared = glm::mat3(
+				1.0f / (sigma.x * sigma.x), 0.0f, 0.0f,
+				0.0f, 1.0f / (sigma.y * sigma.y), 0.0f,
+				0.0f, 0.0f, 1.0f / (sigma.z * sigma.z)
+			);
 
-			gaussians.emplace_back(e);
+			gaussians_general.emplace_back(
+				mu, // mu
+				sigma, // sigma
+				rotation, // rotation
+				rotation * inverse_sigma_squared * glm::transpose(rotation) // inverse covariance
+			);
+			gaussians_additional.emplace_back(e_add);
 		}
 	}
+
 	void create_scene_from_file(const std::string& path_to_ply)
 	{
 		std::ifstream file_stream(path_to_ply, std::ios::binary);
@@ -159,44 +164,65 @@ public:
 		if (f_dc)     std::cout << "\tRead " << f_dc->count << " total sh f_dc " << std::endl;
 		if (f_rest)   std::cout << "\tRead " << f_rest->count << " total sh f_rest " << std::endl;
 
+		Ellipsoid::Q = 1.0f;
+
 		for (std::size_t idx = 0; idx < xyz->count; ++idx)
 		{
-			Ellipsoid e;
+			Ellipsoid::EllipsoidAdditional e_add;
 
-			e.mu[0] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
-			e.mu[1] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
-			e.mu[2] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
-
-			e.sigma[0] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0];
-			e.sigma[1] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1];
-			e.sigma[2] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2];
-
-			e.quaternion[0] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
-			e.quaternion[1] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
-			e.quaternion[2] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
-			e.quaternion[3] = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
-
-			e.sh_dc[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
-			e.sh_dc[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
-			e.sh_dc[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
+			e_add.sh_main[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
+			e_add.sh_main[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
+			e_add.sh_main[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
 
 			if (f_rest)
 			{
 				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 				{
-					e.sh_rest[sh_idx] = 1.0f;
+					e_add.sh_rest[sh_idx] = 1.0f;
 				}
 			}
 
-			// e.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
-			e.opacity = 0.5f;
-			e.Q = 1.0f;
+			e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
 
-			gaussians.emplace_back(e);
+			glm::mat3 rotation = calculate_rotation_matrix(
+				reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0],
+				reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1],
+				reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2],
+				reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3]
+			); // rotation
+			glm::vec3 sigma = glm::vec3(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0], reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1], reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2]); // sigma
+			glm::vec3 mu = glm::vec3(reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0], reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1], reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2]); // mu
+
+			glm::mat3 inverse_sigma_squared = glm::mat3(
+				1.0f / (sigma.x * sigma.x), 0.0f, 0.0f,
+				0.0f, 1.0f / (sigma.y * sigma.y), 0.0f,
+				0.0f, 0.0f, 1.0f / (sigma.z * sigma.z)
+			);
+
+			gaussians_general.emplace_back(
+				mu,
+				sigma,
+				rotation,
+				rotation* inverse_sigma_squared* glm::transpose(rotation)
+			);
+			gaussians_additional.emplace_back(e_add);
 		}
 	}
 
-	std::vector<Ellipsoid>& get_gaussians() { return gaussians; }
+	std::vector<Ellipsoid::EllipsoidGeneral>& get_gaussians_general() { return gaussians_general; }
+	std::vector<Ellipsoid::EllipsoidAdditional>& get_gaussians_additional() { return gaussians_additional; }
+
+private:
+
+	glm::mat3 calculate_rotation_matrix(const float x, const float y, const float z, const float w)
+	{
+		return glm::mat3{
+			{1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)},
+			{2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)},
+			{2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)}
+		};
+	}
+
 };
 
 

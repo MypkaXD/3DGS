@@ -74,6 +74,26 @@ public:
 		return m_shader_id;
 	}
 
+	void set_float(const unsigned int location, float value) const
+	{
+		glUniform1f(location, value);
+	}
+
+	void set_float3(const unsigned int location, float x, float y, float z) const
+	{
+		glUniform3f(location, x, y, z);
+	}
+
+	void set_vec3(const unsigned int location, const glm::vec3& value) const
+	{
+		glUniform3fv(location, 1, glm::value_ptr(value));
+	}
+
+	void set_int(const unsigned int location, int value) const
+	{
+		glUniform1i(location, value);
+	}
+
 };
 
 

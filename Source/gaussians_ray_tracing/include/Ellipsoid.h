@@ -1,20 +1,26 @@
 #ifndef ELLIPSOID_H
 #define ELLIPSOID_H
 
-#include <array>
+#include <glm/glm.hpp>
 
-struct Ellipsoid
+namespace Ellipsoid
 {
-	float mu[3];
-	float sigma[3];
-	float quaternion[4];
-	float sh_dc[3];
-	float sh_rest[45];
+	float Q = 1.0f;
 
-	float opacity;
-	float Q;
+	struct EllipsoidGeneral
+	{
+		glm::vec3 mu;
+		glm::vec3 sigma;
+		glm::mat3 rotation;
+		glm::mat3 inverse_covariance;
+	};
 
-	Ellipsoid() {}
-};
+	struct EllipsoidAdditional
+	{
+		float sh_main[3];
+		float sh_rest[45];
+		float opacity;
+	};
+}
 
 #endif // !ELLIPSOID_H

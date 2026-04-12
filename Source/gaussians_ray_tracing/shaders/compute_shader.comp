@@ -3,15 +3,20 @@
 layout (local_size_x = 8, local_size_y = 4, local_size_z = 1) in;
 layout(rgba32f, binding = 0) uniform image2D out_tex;
 
-struct Ellipsoid
+struct EllipsoidGeneral
 {
-    float mu[3];
-    float sigma[3];
-    float quaternion[4];
-    float sh_dc[3];
+    vec3 mu;
+    vec3 sigma;
+    mat3 rotation;
+    mat3 inverse_covariance;
+};
+
+struct EllipsoidAdditional
+{
+    
+    float sh_main[3];
     float sh_rest[45];
     float opacity;
-    float Q;
 };
 
 struct BVH_Node
@@ -25,17 +30,22 @@ struct BVH_Node
 	int primitive_index;
 };
 
-layout(std430, binding = 1) buffer Ellipsoids
+layout(std430, binding = 1) buffer EllipsoidsGeneral
 {
-    Ellipsoid ellipsoids[];
+    EllipsoidGeneral ellipsoids_gen[];
 };
 
-layout(std430, binding = 2) buffer BVH_Nodes
+layout(std430, binding = 2) buffer EllipsoidsAdditional
+{
+    EllipsoidAdditional ellipsoids_add[];
+};
+
+layout(std430, binding = 3) buffer BVH_Nodes
 {
     BVH_Node nodes[];
 };
 
-layout(std430, binding = 3) buffer BVH_Indices
+layout(std430, binding = 4) buffer BVH_Indices
 {
     uint prim_ids[];
 };
@@ -46,15 +56,7 @@ uniform vec3 camera_right;
 uniform vec3 camera_up;
 uniform float fov;
 uniform float aspect;
-
-vec3 mat3_mul_vec3(mat3 m, vec3 v)
-{
-    return vec3(
-        m[0].x * v.x + m[0].y * v.y + m[0].z * v.z,
-        m[1].x * v.x + m[1].y * v.y + m[1].z * v.z,
-        m[2].x * v.x + m[2].y * v.y + m[2].z * v.z
-    );
-}
+uniform float Q;
 
 bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max)
 {
@@ -70,6 +72,80 @@ bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max)
     float tmax = min(min(tmax_vec.x, tmax_vec.y), tmax_vec.z);
 
     return tmin <= tmax && tmax > 0.0;
+}
+
+void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
+{
+    int stack[64];
+    int stack_ptr = 0;
+    stack[stack_ptr++] = 0;
+    
+    while (stack_ptr > 0)
+    {
+        int node_idx = stack[--stack_ptr];
+        
+        if (node_idx < 0)
+            continue;
+            
+        BVH_Node node = nodes[node_idx];
+        
+        vec3 bounds_min = vec3(node.bounds[0], node.bounds[2], node.bounds[4]);
+        vec3 bounds_max = vec3(node.bounds[1], node.bounds[3], node.bounds[5]);
+        
+        if (!intersectRayAABB(ray_origin, ray_dir, bounds_min, bounds_max))
+            continue;
+        
+        if (node.primitive_counts > 0)
+        {
+            for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
+            {
+                uint ell_idx = prim_ids[i];
+                EllipsoidGeneral ell_gen = ellipsoids_gen[ell_idx];
+        
+                vec3 oc = ray_origin - ell_gen.mu;
+                mat3 temp = ell_gen.inverse_covariance;
+                float a = dot(ray_dir, temp * ray_dir);
+                float b = 2.0 * dot(oc, temp * ray_dir);
+                float c = dot(oc, temp * oc) - Q;
+        
+                float discriminant = b * b - 4.0 * a * c;
+        
+                if (discriminant >= 0.0)
+                {
+                    float sqrt_disc = sqrt(discriminant);
+                    float t1 = (-b - sqrt_disc) / (2.0 * a);
+                    float t2 = (-b + sqrt_disc) / (2.0 * a);
+            
+                    float t = -1.0;
+                    if (t1 > 0.0 && t2 > 0.0) {
+                        t = min(t1, t2);
+                    } else if (t1 > 0.0) {
+                        t = t1;
+                    } else if (t2 > 0.0) {
+                        t = t2;
+                    }
+            
+                    if (t > 0.0)
+                    {
+                        EllipsoidAdditional ell_add = ellipsoids_add[ell_idx];
+                        vec3 sh0_color = vec3(
+                            clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1), 
+                            clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1), 
+                            clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
+                        );
+                        pixel_color.rgb += sh0_color;
+                    }
+                }
+            }
+        }
+        else
+        {
+            if (node.index_right >= 0)
+                stack[stack_ptr++] = node.index_right;
+            if (node.index_left >= 0)
+                stack[stack_ptr++] = node.index_left;
+        }
+    }
 }
 
 void main()
@@ -93,136 +169,8 @@ void main()
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
     vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
-    
-    int stack[64];
-    int stack_ptr = 0;
-    stack[stack_ptr++] = 0;
 
-    float t_params[64];
-    vec3 colors[64];
-    float opacities[64];
-    int hit_count = 0;
-    
-    bool hit = false;
-
-    while (stack_ptr > 0)
-    {
-        int node_idx = stack[--stack_ptr];
-        BVH_Node node = nodes[node_idx];
-        
-        if (!intersectRayAABB(camera_pos, ray_dir, vec3(node.bounds[0], node.bounds[2], node.bounds[4]), vec3(node.bounds[1], node.bounds[3], node.bounds[5])))
-            continue;
-        
-        if (node.primitive_counts > 0)
-        {
-            for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
-            {
-                uint ell_idx = prim_ids[i];
-
-                vec3 mu = vec3(ellipsoids[ell_idx].mu[0], ellipsoids[ell_idx].mu[1], ellipsoids[ell_idx].mu[2]);
-                vec3 sigma = vec3(ellipsoids[ell_idx].sigma[0], ellipsoids[ell_idx].sigma[1], ellipsoids[ell_idx].sigma[2]);
-
-                mat3 cov_recip = mat3(
-                    vec3(1.0 / (sigma.x * sigma.x), 0.0, 0.0),
-                    vec3(0.0, 1.0 / (sigma.y * sigma.y), 0.0),
-                    vec3(0.0, 0.0, 1.0 / (sigma.z * sigma.z))
-                );
-        
-                vec3 oc = camera_pos - mu;
-
-                vec3 temp_a = mat3_mul_vec3(cov_recip, ray_dir);
-                float a = dot(ray_dir, temp_a);
-        
-                vec3 temp_b = mat3_mul_vec3(cov_recip, ray_dir);
-                float b = 2.0 * dot(oc, temp_b);
-        
-                vec3 temp_c = mat3_mul_vec3(cov_recip, oc);
-                float c = dot(oc, temp_c) - ellipsoids[ell_idx].Q;
-        
-                float discriminant = b * b - 4.0 * a * c;
-        
-                if (discriminant >= 0.0)
-                {
-                    float sqrt_disc = sqrt(discriminant);
-                    float t1 = (-b - sqrt_disc) / (2.0 * a);
-                    float t2 = (-b + sqrt_disc) / (2.0 * a);
-            
-                    float t = -1.0;
-                    if (t1 > 0.0 && t2 > 0.0) {
-                        t = min(t1, t2);
-                    } else if (t1 > 0.0) {
-                        t = t1;
-                    } else if (t2 > 0.0) {
-                        t = t2;
-                    }
-            
-                    if (t > 0.0)
-                    {
-                        vec3 sh0_color = vec3(
-                            clamp(0.2820947918 * ellipsoids[ell_idx].sh_dc[0] + 0.5, 0, 1), 
-                            clamp(0.2820947918 * ellipsoids[ell_idx].sh_dc[1] + 0.5, 0, 1), 
-                            clamp(0.2820947918 * ellipsoids[ell_idx].sh_dc[2] + 0.5, 0, 1)
-                        );
-                        opacities[hit_count] = ellipsoids[ell_idx].opacity;
-                        colors[hit_count] = sh0_color;
-                        t_params[hit_count] = t;
-                        hit_count++;
-                    }
-                }
-            }
-            // break;
-        }
-        else
-        {
-            // нужно вычислить какой узел ближе к камере и сначала его обработать
-            if (node.index_right >= 0)
-            {
-                if (stack_ptr < 64)
-                    stack[stack_ptr++] = node.index_right;
-            }
-            if (node.index_left >= 0)
-            {
-                if (stack_ptr < 64)
-                    stack[stack_ptr++] = node.index_left;
-            }
-        }
-    }
-
-    // —ортируем попадани€ по рассто€нию от камеры
-    for (int i = 0; i < hit_count - 1; i++)
-    {
-        for (int j = 0; j < hit_count - i - 1; j++)
-        {
-            if (t_params[j] > t_params[j + 1])
-            {
-                float temp_t = t_params[j];
-                t_params[j] = t_params[j + 1];
-                t_params[j + 1] = temp_t;
-                float temp_opacity = opacities[j];
-                opacities[j] = opacities[j + 1];
-                opacities[j + 1] = temp_opacity;сд
-                vec3 temp_color = colors[j];
-                colors[j] = colors[j + 1];
-                colors[j + 1] = temp_color;
-            }
-        }
-    }
-
-    float total_opacity = 0.0;
-
-    //  омпозитинг
-    for (int i = 0; i < hit_count; i++)
-    {
-        pixel_color.rgb += colors[i] * opacities[i];
-        pixel_color.a *= (1.0 - total_opacity);
-        
-        total_opacity += opacities[i];
-
-        if (total_opacity >= 1.0)
-        {
-            break;
-        }
-    }
+    traverse_bvh(camera_pos, ray_dir, pixel_color);
     
     imageStore(out_tex, pos, pixel_color);
 }
