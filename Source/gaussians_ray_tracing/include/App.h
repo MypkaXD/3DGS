@@ -62,8 +62,11 @@ private:
 
 	unsigned int m_VAO_gaussians;
 	unsigned int m_SSBO_gaussians;
+	unsigned int m_SSBO_bvh_nodes;
+	unsigned int m_SSBO_bvh_ids;
 
 	std::vector<AABB> m_bvh;
+	BVHGPU m_bvh_gpu;
 
 public:
 
@@ -82,6 +85,8 @@ public:
 
 		glDeleteVertexArrays(1, &m_VAO_gaussians);
 		glDeleteBuffers(1, &m_SSBO_gaussians);
+		glDeleteBuffers(1, &m_SSBO_bvh_nodes);
+		glDeleteBuffers(1, &m_SSBO_bvh_ids);
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -108,7 +113,7 @@ public:
 		std::vector<AABB> aabb;
 		generate_AABB_from_gaussians(m_loader.get_gaussians(), aabb);
 
-		create_bvh(aabb, m_bvh);
+		create_bvh(aabb, m_bvh, m_bvh_gpu);
 
 		return true;
 	}
@@ -167,8 +172,17 @@ public:
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians().size() * sizeof(Ellipsoid), m_loader.get_gaussians().data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_SSBO_gaussians);
+			
+		glGenBuffers(1, &m_SSBO_bvh_nodes);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_bvh_nodes);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, m_bvh_gpu.nodes.size() * sizeof(BVHNodeGPU), m_bvh_gpu.nodes.data(), GL_STATIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_bvh_nodes);
+
+		glGenBuffers(1, &m_SSBO_bvh_ids);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_bvh_ids);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, m_bvh_gpu.prim_ids.size() * sizeof(size_t), m_bvh_gpu.prim_ids.data(), GL_STATIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_SSBO_bvh_ids);
 		glBindVertexArray(0);
-				
 
 		GLint camera_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_pos");
 		GLint camera_front_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "camera_front");
@@ -204,7 +218,7 @@ public:
 			glUniform1f(fov_loc, m_camera.Zoom);
 			float aspect = (float)m_width / (float)m_height;
 			glUniform1f(aspect_loc, aspect);
-			glDispatchCompute(m_width, m_height, 1);
+			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 			m_shader_texture_draw.use();
@@ -328,9 +342,9 @@ private:
 	void init_gaussians()
 	{
 		// create scene
-		m_loader.create_random_scene(100);
+		// m_loader.create_random_scene(1000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
 
 		std::cout << m_loader.get_gaussians().size() << " gaussians loaded." << std::endl;

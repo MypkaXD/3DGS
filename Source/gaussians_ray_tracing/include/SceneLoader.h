@@ -180,19 +180,16 @@ public:
 			e.sh_dc[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
 			e.sh_dc[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
 
-			for (std::size_t sh_idx = 0; sh_idx < 15; ++sh_idx)
+			if (f_rest)
 			{
-				if (f_rest)
+				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 				{
-					if (idx == 0)
-					{
-						e.sh_rest[sh_idx] = reinterpret_cast<float*>(f_rest->buffer.get())[idx * 15 + sh_idx];
-						std::cout << e.sh_rest[sh_idx] << std::endl;
-					}
+					e.sh_rest[sh_idx] = 1.0f;
 				}
 			}
 
-			e.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			// e.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			e.opacity = 0.5f;
 			e.Q = 1.0f;
 
 			gaussians.emplace_back(e);
