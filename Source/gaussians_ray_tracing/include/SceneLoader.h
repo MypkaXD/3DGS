@@ -212,6 +212,8 @@ public:
 
 			e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
 
+			std::cout << e_add.opacity << std::endl;
+
 			gaussians_general.emplace_back(e_gen);
 			gaussians_addiotional.emplace_back(e_add);
 		}

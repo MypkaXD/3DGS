@@ -78,6 +78,7 @@ bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max, i
 struct HitInfo
 {
     float t;
+    float response;
     uint ellipsoid_index;
 };
 
@@ -135,6 +136,10 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                         closest_hit[hit_count].t = t;
                         closest_hit[hit_count].ellipsoid_index = ell_idx;
 
+                        float t_peak = -b / (2.0 * a);
+                        float f_peak = c - (b * b) / (4.0 * a);
+                        closest_hit[hit_count].response = exp(-0.5 * f_peak);
+
                         ++hit_count;
                     }
                 }
@@ -162,24 +167,25 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
             for (int i = 0; i < hit_count; i++)
             {
                 EllipsoidAddtitional ell_add = ellipsoid_addtitional[closest_hit[i].ellipsoid_index];
-    
+
                 vec3 color = vec3(
                     clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1),
                     clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1),
                     clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
                 );
-    
-                float alpha = clamp(ell_add.opacity, 0.0, 1.0);
-    
+
+                float alpha = clamp(ell_add.opacity, 0.0, 1.0) * closest_hit[i].response;
+
                 accumulated_color += color * alpha * accumulated_transmittance;
-    
                 accumulated_transmittance *= (1.0 - alpha);
-    
+
                 if (accumulated_transmittance < 0.01)
                     break;
             }
 
-            pixel_color.rgb = accumulated_color + pixel_color.rgb * accumulated_transmittance;
+            // Сохраняем только цвет сцены и прозрачность
+            pixel_color.rgb = accumulated_color;
+            pixel_color.a = 1.0 - accumulated_transmittance;
         }
         else
         {
@@ -244,7 +250,7 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(1.0, 1.0, 1.0, 1.0);
+    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
 
     traverse_bvh(camera_pos, ray_dir, pixel_color);
     
