@@ -57,7 +57,7 @@ uniform float fov;
 uniform float aspect;
 uniform float Q;
 
-bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max)
+bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max, inout float t)
 {
     vec3 inv_dir = 1.0 / dir;
 
@@ -70,40 +70,38 @@ bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max)
     float tmin = max(max(tmin_vec.x, tmin_vec.y), tmin_vec.z);
     float tmax = min(min(tmax_vec.x, tmax_vec.y), tmax_vec.z);
 
+    t = tmin;
+
     return tmin <= tmax && tmax > 0.0;
 }
 
-struct Hit {
+struct HitInfo
+{
     float t;
-    uint ell_idx;
+    uint ellipsoid_index;
 };
 
 void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
 {
+
     int stack[64];
     int stack_ptr = 0;
-    stack[stack_ptr++] = 0;
-    
-    Hit hits[256];  // Максимум пересечений на луч
-    int hit_count = 0;
-    
-    while (stack_ptr > 0 && hit_count < 256)
+
+    stack[stack_ptr] = 0;
+    ++stack_ptr;
+
+    while (stack_ptr > 0)
     {
-        int node_idx = stack[--stack_ptr];
-        
-        if (node_idx < 0)
-            continue;
-            
-        BVH_Node node = nodes[node_idx];
-        
-        vec3 bounds_min = vec3(node.bounds[0], node.bounds[2], node.bounds[4]);
-        vec3 bounds_max = vec3(node.bounds[1], node.bounds[3], node.bounds[5]);
-        
-        if (!intersectRayAABB(ray_origin, ray_dir, bounds_min, bounds_max))
-            continue;
-        
-        if (node.primitive_counts > 0)
+        stack_ptr--;
+        int node_index = stack[stack_ptr];
+
+        BVH_Node node = nodes[node_index];
+
+        if (node.primitive_index != -1) // Leaf node
         {
+            HitInfo closest_hit[8];
+            int hit_count = 0;
+
             for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
             {
                 uint ell_idx = prim_ids[i];
@@ -134,60 +132,96 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
             
                     if (t > 0.0)
                     {
-                        hits[hit_count].t = t;
-                        hits[hit_count].ell_idx = ell_idx;
-                        hit_count++;
+                        closest_hit[hit_count].t = t;
+                        closest_hit[hit_count].ellipsoid_index = ell_idx;
+
+                        ++hit_count;
                     }
                 }
             }
+
+            if (hit_count == 0)
+                continue;
+
+            for (int i = 0; i < hit_count - 1; i++)
+            {
+                for (int j = 0; j < hit_count - i - 1; j++)
+                {
+                    if (closest_hit[j].t > closest_hit[j + 1].t)
+                    {
+                        HitInfo temp = closest_hit[j];
+                        closest_hit[j] = closest_hit[j + 1];
+                        closest_hit[j + 1] = temp;
+                    }
+                }
+            }
+
+            vec3 accumulated_color = vec3(0.0);
+            float accumulated_transmittance = 1.0;
+
+            for (int i = 0; i < hit_count; i++)
+            {
+                EllipsoidAddtitional ell_add = ellipsoid_addtitional[closest_hit[i].ellipsoid_index];
+    
+                vec3 color = vec3(
+                    clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1),
+                    clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1),
+                    clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
+                );
+    
+                float alpha = clamp(ell_add.opacity, 0.0, 1.0);
+    
+                accumulated_color += color * alpha * accumulated_transmittance;
+    
+                accumulated_transmittance *= (1.0 - alpha);
+    
+                if (accumulated_transmittance < 0.01)
+                    break;
+            }
+
+            pixel_color.rgb = accumulated_color + pixel_color.rgb * accumulated_transmittance;
         }
         else
         {
-            if (node.index_right >= 0)
-                stack[stack_ptr++] = node.index_right;
-            if (node.index_left >= 0)
-                stack[stack_ptr++] = node.index_left;
-        }
-    }
-    
-    for (int i = 0; i < hit_count - 1; i++)
-    {
-        for (int j = i + 1; j < hit_count; j++)
-        {
-            if (hits[i].t > hits[j].t)
+            BVH_Node left = nodes[node.index_left]; // get left child
+            BVH_Node right = nodes[node.index_right]; // get right child
+
+            float t_left;
+            float t_right;
+
+            bool hit_left = intersectRayAABB(ray_origin, ray_dir, vec3(left.bounds[0], left.bounds[2], left.bounds[4]), vec3(left.bounds[1], left.bounds[3], left.bounds[5]), t_left);
+            bool hit_right = intersectRayAABB(ray_origin, ray_dir, vec3(right.bounds[0], right.bounds[2], right.bounds[4]), vec3(right.bounds[1], right.bounds[3], right.bounds[5]), t_right);
+
+            if (!hit_left && !hit_right) 
             {
-                Hit temp = hits[i];
-                hits[i] = hits[j];
-                hits[j] = temp;
+                continue;
             }
+
+            bool left_first = (t_left < t_right) && hit_left;
+
+            int left_idx = node.index_left;
+            int right_idx = node.index_right;
+
+            if (hit_right && !left_first) {
+                stack[stack_ptr] = right_idx;
+                stack_ptr++;
+            }
+            if (hit_left && left_first) {
+                stack[stack_ptr] = left_idx;
+                stack_ptr++;
+            }
+
+            if (hit_left && !left_first) {
+                stack[stack_ptr] = left_idx;
+                stack_ptr++;
+            }
+            if (hit_right && left_first) {
+                stack[stack_ptr] = right_idx;
+                stack_ptr++;
+            }
+            
         }
     }
-    
-    vec3 accumulated_color = vec3(0.0);
-    float accumulated_transmittance = 1.0;
-
-    for (int i = 0; i < hit_count; i++)
-    {
-        EllipsoidAddtitional ell_add = ellipsoid_addtitional[hits[i].ell_idx];
-    
-        vec3 color = vec3(
-            clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1),
-            clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1),
-            clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
-        );
-    
-        float alpha = clamp(ell_add.opacity, 0.0, 1.0);
-    
-        accumulated_color += color * alpha * accumulated_transmittance;
-    
-        accumulated_transmittance *= (1.0 - alpha);
-    
-        if (accumulated_transmittance < 0.01)
-            break;
-    }
-
-    pixel_color.rgb = accumulated_color;
-    pixel_color.a = 1.0 - accumulated_transmittance;
 }
 
 void main()
@@ -210,7 +244,7 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 pixel_color = vec4(1.0, 1.0, 1.0, 1.0);
 
     traverse_bvh(camera_pos, ray_dir, pixel_color);
     

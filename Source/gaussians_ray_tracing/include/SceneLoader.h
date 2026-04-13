@@ -294,7 +294,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 1.0f;
+					e_add.opacity = 0.4f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
@@ -349,7 +349,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 1.0f;
+					e_add.opacity = 0.4f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
