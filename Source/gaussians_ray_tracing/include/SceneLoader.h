@@ -76,6 +76,7 @@ public:
 			}
 
 			e_add.opacity = dis_uniform_0_to_1(gen);
+			// e_add.opacity = 0.2;
 
 			gaussians_general.emplace_back(e_gen);
 			gaussians_addiotional.emplace_back(e_add);
@@ -210,7 +211,8 @@ public:
 				}
 			}
 
-			e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			// e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			e_add.opacity = 0.2f;
 
 			std::cout << e_add.opacity << std::endl;
 
@@ -271,7 +273,7 @@ public:
 					Ellipsoid::EllipsoidAddtitional e_add;
 
 					e_gen.mu = glm::vec4(coord, 0);
-					e_gen.sigma = glm::vec4(2.0f, 2.0f, 2.0f, 0);
+					e_gen.sigma = glm::vec4(0.5f, 0.5f, 0.5f, 0);
 					e_gen.rotation = glm::mat4(1.0f);
 
 					glm::mat4 scale_invatiant_squared = glm::mat4(
@@ -296,7 +298,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 0.4f;
+					e_add.opacity = 0.2f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
@@ -326,7 +328,7 @@ public:
 					Ellipsoid::EllipsoidAddtitional e_add;
 
 					e_gen.mu = glm::vec4(coord + glm::vec3(50.0f, 50.0f, 0.0f), 0);
-					e_gen.sigma = glm::vec4(2.0f, 2.0f, 2.0f, 0);
+					e_gen.sigma = glm::vec4(0.5f, 0.5f, 0.5f, 0);
 					e_gen.rotation = glm::mat4(1.0f);
 
 					glm::mat4 scale_invatiant_squared = glm::mat4(
@@ -351,7 +353,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 0.4f;
+					e_add.opacity = 0.2f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
@@ -361,6 +363,61 @@ public:
 
 		std::cout << "Created cube with " << gaussians_general.size() << " gaussians." << std::endl;
 	}
+
+	void create_line()
+	{
+		std::random_device rd;
+		std::uniform_real_distribution<float> dis_uniform(0.0f, 1.0f);
+		std::mt19937 gen(rd());
+
+		gaussians_general.clear();
+		gaussians_addiotional.clear();
+
+		std::size_t n = 10;
+
+		float step = 10.0f;
+
+		for (std::size_t j = 0; j < n; ++j)
+		{
+
+			Ellipsoid::EllipsoidGeneral e_gen;
+			Ellipsoid::EllipsoidAddtitional e_add;
+
+			e_gen.mu = glm::vec4(glm::vec3(0.0, 0.0, j * step), 0);
+			e_gen.sigma = glm::vec4(0.5f, 0.5f, 0.5f, 0);
+			e_gen.rotation = glm::mat4(1.0f);
+
+			glm::mat4 scale_invatiant_squared = glm::mat4(
+				1.0f / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f / (e_gen.sigma[1] * e_gen.sigma[1]), 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f / (e_gen.sigma[2] * e_gen.sigma[2]), 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			);
+
+			e_gen.covariance_invariant = scale_invatiant_squared;
+
+			//e_add.sh_main[0] = 1.78f;
+			//e_add.sh_main[1] = 1.78f;
+			//e_add.sh_main[2] = 1.78f;
+
+			e_add.sh_main[0] = dis_uniform(gen);
+			e_add.sh_main[1] = dis_uniform(gen);
+			e_add.sh_main[2] = dis_uniform(gen);
+
+			for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+			{
+				e_add.sh_add[sh_idx] = 0.0f;
+			}
+
+			e_add.opacity = 1.0f;
+
+			gaussians_general.emplace_back(e_gen);
+			gaussians_addiotional.emplace_back(e_add);
+		}
+
+		std::cout << "Created cube with " << gaussians_general.size() << " gaussians." << std::endl;
+	}
+
 
 	std::vector<Ellipsoid::EllipsoidGeneral>& get_gaussians_general() { return gaussians_general; }
 	std::vector<Ellipsoid::EllipsoidAddtitional>& get_gaussians_additional() { return gaussians_addiotional; }

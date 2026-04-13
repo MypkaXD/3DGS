@@ -136,9 +136,17 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                         closest_hit[hit_count].t = t;
                         closest_hit[hit_count].ellipsoid_index = ell_idx;
 
+                        // float t_peak = -b / (2.0 * a);
+                        // float f_peak = c - (b * b) / (4.0 * a);
+                        // closest_hit[hit_count].response = exp(-0.5 * f_peak);
+
                         float t_peak = -b / (2.0 * a);
-                        float f_peak = c - (b * b) / (4.0 * a);
-                        closest_hit[hit_count].response = exp(-0.5 * f_peak);
+                        vec3 point_on_ray = ray_origin + ray_dir * t_peak;
+                        vec3 diff = point_on_ray - ell_gen.mu.xyz;
+                        
+                        float mahalanobis_sq = dot(diff, temp * diff);
+                        
+                        closest_hit[hit_count].response = exp(-0.5 * mahalanobis_sq);
 
                         ++hit_count;
                     }
@@ -178,14 +186,10 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
 
                 accumulated_color += color * alpha * accumulated_transmittance;
                 accumulated_transmittance *= (1.0 - alpha);
-
-                if (accumulated_transmittance < 0.01)
-                    break;
             }
 
-            // Сохраняем только цвет сцены и прозрачность
-            pixel_color.rgb = accumulated_color;
-            pixel_color.a = 1.0 - accumulated_transmittance;
+            pixel_color.rgb += accumulated_color;
+            pixel_color.a += accumulated_transmittance;
         }
         else
         {
@@ -250,9 +254,11 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 0.0);
 
     traverse_bvh(camera_pos, ray_dir, pixel_color);
     
+    pixel_color.a = 1 - pixel_color.a;
+
     imageStore(out_tex, pos, pixel_color);
 }
