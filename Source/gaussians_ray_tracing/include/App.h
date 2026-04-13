@@ -51,9 +51,6 @@ private:
 	static float m_delta_time;	// time between current frame and last frame
 	static float m_last_frame;
 
-	float m_gaussian_Q = 1.0f;
-
-
 	unsigned int m_VAO_draw_texture;
 	unsigned int m_VBO_draw_texture;
 	unsigned int m_EBO_draw_texture;
@@ -351,10 +348,11 @@ private:
 	void init_gaussians()
 	{
 		// create scene
+		m_loader.create_cube();
 		// m_loader.create_random_scene(100000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
-		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
 
 		std::cout << m_loader.get_gaussians_count() << " gaussians loaded." << std::endl;
 

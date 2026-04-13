@@ -69,11 +69,10 @@ public:
 			e_add.sh_main[0] = dis_uniform_0_to_1(gen);
 			e_add.sh_main[1] = dis_uniform_0_to_1(gen);
 			e_add.sh_main[2] = dis_uniform_0_to_1(gen);
-			e_add.sh_main[3] = 0;
 
-			for (std::size_t idx_sh = 0; idx_sh < 15; ++idx_sh)
+			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
 			{
-				e_add.sh_add[idx_sh] = glm::vec4(dis_uniform_0_to_1(gen), dis_uniform_0_to_1(gen), dis_uniform_0_to_1(gen), 0.0f);
+				e_add.sh_add[idx_sh] = dis_uniform_0_to_1(gen);
 			}
 
 			e_add.opacity = dis_uniform_0_to_1(gen);
@@ -202,23 +201,163 @@ public:
 			e_add.sh_main[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
 			e_add.sh_main[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
 			e_add.sh_main[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
-			e_add.sh_main[3] = 0;
 
 			if (f_rest)
 			{
-				for (std::size_t sh_idx = 0; sh_idx < 15; ++sh_idx)
+				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 				{
-					e_add.sh_add[sh_idx] = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+					e_add.sh_add[sh_idx] = 0.0f;
 				}
 			}
 
 			e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
-			
-			Ellipsoid::Q = 1.0f;
 
 			gaussians_general.emplace_back(e_gen);
 			gaussians_addiotional.emplace_back(e_add);
 		}
+	}
+
+	void create_cube()
+	{
+		std::random_device rd;
+		std::uniform_real_distribution<float> dis_uniform(0.0f, 1.0f);
+		std::mt19937 gen(rd());
+
+		gaussians_general.clear();
+		gaussians_addiotional.clear();
+
+		std::size_t n = 10;
+
+		glm::vec3 cube_min(-10, -10, -10);
+		glm::vec3 cube_max(10, 10, 10);
+		glm::vec3 length = cube_max - cube_min;
+		glm::vec3 step = length / float(n - 1);
+
+		struct Face {
+			int fixed_axis;
+			float fixed_value;
+		};
+
+		std::vector<Face> faces = {
+			{0, cube_min.x},  // x = -10
+			{0, cube_max.x},  // x =  10
+			{1, cube_min.y},  // y = -10
+			{1, cube_max.y},  // y =  10
+			{2, cube_min.z},  // z = -10
+			{2, cube_max.z}   // z =  10
+		};
+
+		for (const auto& face : faces)
+		{
+			for (std::size_t i = 0; i < n; ++i)
+			{
+				for (std::size_t j = 0; j < n; ++j)
+				{
+					// Создаём координату
+					glm::vec3 coord;
+
+					// Две свободные оси получают значения i и j
+					int free_axis1 = (face.fixed_axis + 1) % 3;
+					int free_axis2 = (face.fixed_axis + 2) % 3;
+
+					coord[face.fixed_axis] = face.fixed_value;
+					coord[free_axis1] = cube_min[free_axis1] + step[free_axis1] * float(i);
+					coord[free_axis2] = cube_min[free_axis2] + step[free_axis2] * float(j);
+
+					// Создаём эллипсоид
+					Ellipsoid::EllipsoidGeneral e_gen;
+					Ellipsoid::EllipsoidAddtitional e_add;
+
+					e_gen.mu = glm::vec4(coord, 0);
+					e_gen.sigma = glm::vec4(2.0f, 2.0f, 2.0f, 0);
+					e_gen.rotation = glm::mat4(1.0f);
+
+					glm::mat4 scale_invatiant_squared = glm::mat4(
+						1.0f / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+						0.0f, 1.0f / (e_gen.sigma[1] * e_gen.sigma[1]), 0.0f, 0.0f,
+						0.0f, 0.0f, 1.0f / (e_gen.sigma[2] * e_gen.sigma[2]), 0.0f,
+						0.0f, 0.0f, 0.0f, 1.0f
+					);
+
+					e_gen.covariance_invariant = scale_invatiant_squared;
+
+					//e_add.sh_main[0] = 1.78f;
+					//e_add.sh_main[1] = 1.78f;
+					//e_add.sh_main[2] = 1.78f;
+
+					e_add.sh_main[0] = dis_uniform(gen);
+					e_add.sh_main[1] = dis_uniform(gen);
+					e_add.sh_main[2] = dis_uniform(gen);
+
+					for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+					{
+						e_add.sh_add[sh_idx] = 0.0f;
+					}
+
+					e_add.opacity = 1.0f;
+
+					gaussians_general.emplace_back(e_gen);
+					gaussians_addiotional.emplace_back(e_add);
+				}
+			}
+		}
+
+		for (const auto& face : faces)
+		{
+			for (std::size_t i = 0; i < n; ++i)
+			{
+				for (std::size_t j = 0; j < n; ++j)
+				{
+					// Создаём координату
+					glm::vec3 coord;
+
+					// Две свободные оси получают значения i и j
+					int free_axis1 = (face.fixed_axis + 1) % 3;
+					int free_axis2 = (face.fixed_axis + 2) % 3;
+
+					coord[face.fixed_axis] = face.fixed_value;
+					coord[free_axis1] = cube_min[free_axis1] + step[free_axis1] * float(i);
+					coord[free_axis2] = cube_min[free_axis2] + step[free_axis2] * float(j);
+
+					// Создаём эллипсоид
+					Ellipsoid::EllipsoidGeneral e_gen;
+					Ellipsoid::EllipsoidAddtitional e_add;
+
+					e_gen.mu = glm::vec4(coord + glm::vec3(50.0f, 50.0f, 0.0f), 0);
+					e_gen.sigma = glm::vec4(2.0f, 2.0f, 2.0f, 0);
+					e_gen.rotation = glm::mat4(1.0f);
+
+					glm::mat4 scale_invatiant_squared = glm::mat4(
+						1.0f / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+						0.0f, 1.0f / (e_gen.sigma[1] * e_gen.sigma[1]), 0.0f, 0.0f,
+						0.0f, 0.0f, 1.0f / (e_gen.sigma[2] * e_gen.sigma[2]), 0.0f,
+						0.0f, 0.0f, 0.0f, 1.0f
+					);
+
+					e_gen.covariance_invariant = scale_invatiant_squared;
+
+					//e_add.sh_main[0] = 1.78f;
+					//e_add.sh_main[1] = 1.78f;
+					//e_add.sh_main[2] = 1.78f;
+
+					e_add.sh_main[0] = dis_uniform(gen);
+					e_add.sh_main[1] = dis_uniform(gen);
+					e_add.sh_main[2] = dis_uniform(gen);
+
+					for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+					{
+						e_add.sh_add[sh_idx] = 0.0f;
+					}
+
+					e_add.opacity = 1.0f;
+
+					gaussians_general.emplace_back(e_gen);
+					gaussians_addiotional.emplace_back(e_add);
+				}
+			}
+		}
+
+		std::cout << "Created cube with " << gaussians_general.size() << " gaussians." << std::endl;
 	}
 
 	std::vector<Ellipsoid::EllipsoidGeneral>& get_gaussians_general() { return gaussians_general; }

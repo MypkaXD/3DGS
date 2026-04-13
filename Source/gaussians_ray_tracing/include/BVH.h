@@ -1,8 +1,6 @@
 #ifndef BVH_H
 #define BVH_H
 
-#define DEBUG
-
 #include <AABB.h>
 
 #include <vector>

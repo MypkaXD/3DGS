@@ -5,7 +5,7 @@
 
 namespace Ellipsoid
 {
-	float Q = 1.0f;
+	float Q = 0.2f;
 
 	struct EllipsoidGeneral
 	{
@@ -17,8 +17,8 @@ namespace Ellipsoid
 
 	struct EllipsoidAddtitional
 	{
-		glm::vec4 sh_main;
-		glm::vec4 sh_add[15];
+		float sh_main[3];
+		float sh_add[45];
 		float opacity;
 	};
 };

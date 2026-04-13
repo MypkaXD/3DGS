@@ -13,8 +13,8 @@ struct EllipsoidGeneral
 
 struct EllipsoidAddtitional
 {
-	vec4 sh_main;
-	vec4 sh_add[15];
+	float sh_main[3];
+	float sh_add[45];
 	float opacity;
 };
 
@@ -73,13 +73,21 @@ bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max)
     return tmin <= tmax && tmax > 0.0;
 }
 
+struct Hit {
+    float t;
+    uint ell_idx;
+};
+
 void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
 {
     int stack[64];
     int stack_ptr = 0;
     stack[stack_ptr++] = 0;
     
-    while (stack_ptr > 0)
+    Hit hits[256];  // Максимум пересечений на луч
+    int hit_count = 0;
+    
+    while (stack_ptr > 0 && hit_count < 256)
     {
         int node_idx = stack[--stack_ptr];
         
@@ -126,13 +134,9 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
             
                     if (t > 0.0)
                     {
-                        EllipsoidAddtitional ell_add = ellipsoid_addtitional[ell_idx];
-                        vec3 sh0_color = vec3(
-                            clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1), 
-                            clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1), 
-                            clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
-                        );
-                        pixel_color.rgb += sh0_color * ell_add.opacity;
+                        hits[hit_count].t = t;
+                        hits[hit_count].ell_idx = ell_idx;
+                        hit_count++;
                     }
                 }
             }
@@ -145,6 +149,45 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                 stack[stack_ptr++] = node.index_left;
         }
     }
+    
+    for (int i = 0; i < hit_count - 1; i++)
+    {
+        for (int j = i + 1; j < hit_count; j++)
+        {
+            if (hits[i].t > hits[j].t)
+            {
+                Hit temp = hits[i];
+                hits[i] = hits[j];
+                hits[j] = temp;
+            }
+        }
+    }
+    
+    vec3 accumulated_color = vec3(0.0);
+    float accumulated_transmittance = 1.0;
+
+    for (int i = 0; i < hit_count; i++)
+    {
+        EllipsoidAddtitional ell_add = ellipsoid_addtitional[hits[i].ell_idx];
+    
+        vec3 color = vec3(
+            clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1),
+            clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1),
+            clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
+        );
+    
+        float alpha = clamp(ell_add.opacity, 0.0, 1.0);
+    
+        accumulated_color += color * alpha * accumulated_transmittance;
+    
+        accumulated_transmittance *= (1.0 - alpha);
+    
+        if (accumulated_transmittance < 0.01)
+            break;
+    }
+
+    pixel_color.rgb = accumulated_color;
+    pixel_color.a = 1.0 - accumulated_transmittance;
 }
 
 void main()
