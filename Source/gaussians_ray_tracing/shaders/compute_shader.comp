@@ -56,6 +56,7 @@ uniform vec3 camera_up;
 uniform float fov;
 uniform float aspect;
 uniform float Q;
+uniform vec3 light_pos;
 
 bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max, inout float t)
 {
@@ -82,7 +83,111 @@ struct HitInfo
     uint ellipsoid_index;
 };
 
-void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
+// bool is_open_to_light_source(vec3 ray_origin, vec3 ray_dir)
+// {
+//     int stack[64];
+//     int stack_ptr = 0;
+// 
+//     stack[stack_ptr] = 0;
+//     ++stack_ptr;
+// 
+//     float stored_opacity = 0.0;
+// 
+//     while (stack_ptr > 0)
+//     {
+//         if (stored_opacity >= 1.0)
+//             return false;
+// 
+//         stack_ptr--;
+//         int node_index = stack[stack_ptr];
+// 
+//         BVH_Node node = nodes[node_index];
+// 
+//         if (node.primitive_index != -1) // Leaf node
+//         {
+//             HitInfo closest_hit[8];
+//             int hit_count = 0;
+// 
+//             for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
+//             {
+//                 uint ell_idx = prim_ids[i];
+//                 EllipsoidGeneral ell_gen = ellipsoid_general[ell_idx];
+//         
+//                 vec3 oc = ray_origin - ell_gen.mu.xyz;
+//                 mat3 temp = mat3(ell_gen.covariance_invariant);
+//                 float a = dot(ray_dir, temp * ray_dir);
+//                 float b = 2.0 * dot(oc, temp * ray_dir);
+//                 float c = dot(oc, temp * oc) - Q;
+//         
+//                 float discriminant = b * b - 4.0 * a * c;
+//         
+//                 if (discriminant >= 0.0)
+//                 {
+//                     float sqrt_disc = sqrt(discriminant);
+//                     float t1 = (-b - sqrt_disc) / (2.0 * a);
+//                     float t2 = (-b + sqrt_disc) / (2.0 * a);
+//             
+//                     float t = -1.0;
+//                     if (t1 > 0.0 && t2 > 0.0) {
+//                         t = min(t1, t2);
+//                     } else if (t1 > 0.0) {
+//                         t = t1;
+//                     } else if (t2 > 0.0) {
+//                         t = t2;
+//                     }
+//             
+//                     if (t > 0.0)
+//                     {
+//                         stored_opacity += clamp(ellipsoid_addtitional[ell_idx].opacity, 0.0, 1.0);
+//                     }
+//                 }
+//             }
+//         }
+//         else
+//         {
+//             BVH_Node left = nodes[node.index_left]; // get left child
+//             BVH_Node right = nodes[node.index_right]; // get right child
+// 
+//             float t_left;
+//             float t_right;
+// 
+//             bool hit_left = intersectRayAABB(ray_origin, ray_dir, vec3(left.bounds[0], left.bounds[2], left.bounds[4]), vec3(left.bounds[1], left.bounds[3], left.bounds[5]), t_left);
+//             bool hit_right = intersectRayAABB(ray_origin, ray_dir, vec3(right.bounds[0], right.bounds[2], right.bounds[4]), vec3(right.bounds[1], right.bounds[3], right.bounds[5]), t_right);
+// 
+//             if (!hit_left && !hit_right) 
+//             {
+//                 continue;
+//             }
+// 
+//             bool left_first = (t_left < t_right) && hit_left;
+// 
+//             int left_idx = node.index_left;
+//             int right_idx = node.index_right;
+// 
+//             if (hit_right && !left_first) {
+//                 stack[stack_ptr] = right_idx;
+//                 stack_ptr++;
+//             }
+//             if (hit_left && left_first) {
+//                 stack[stack_ptr] = left_idx;
+//                 stack_ptr++;
+//             }
+// 
+//             if (hit_left && !left_first) {
+//                 stack[stack_ptr] = left_idx;
+//                 stack_ptr++;
+//             }
+//             if (hit_right && left_first) {
+//                 stack[stack_ptr] = right_idx;
+//                 stack_ptr++;
+//             }
+//         }
+//     }
+// 
+//     return stored_opacity < 1.0;
+// }
+
+void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color, inout float far_t)
 {
 
     int stack[64];
@@ -169,11 +274,8 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                 }
             }
 
-            vec3 accumulated_color = vec3(0.0);
-            float accumulated_transmittance = 1.0;
-
             for (int i = 0; i < hit_count; i++)
-            {
+            {                
                 EllipsoidAddtitional ell_add = ellipsoid_addtitional[closest_hit[i].ellipsoid_index];
 
                 vec3 color = vec3(
@@ -182,14 +284,11 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
                     clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
                 );
 
-                float alpha = clamp(ell_add.opacity, 0.0, 1.0) * closest_hit[i].response;
+                float alpha = ell_add.opacity * closest_hit[i].response;
 
-                accumulated_color += color * alpha * accumulated_transmittance;
-                accumulated_transmittance *= (1.0 - alpha);
+                pixel_color.rgb += color * alpha * pixel_color.a;
+                pixel_color.a *= (1.0 - alpha);
             }
-
-            pixel_color.rgb += accumulated_color;
-            pixel_color.a += accumulated_transmittance;
         }
         else
         {
@@ -254,11 +353,20 @@ void main()
     
     vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
     
-    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    traverse_bvh(camera_pos, ray_dir, pixel_color);
+    float t = 0.0;
+
+    traverse_bvh(camera_pos, ray_dir, pixel_color, t);
     
-    pixel_color.a = 1 - pixel_color.a;
+    // vec3 pos_hit = camera_pos + ray_dir * t;
+    //             
+    // bool is_open_to_light = is_open_to_light_source(pos_hit, normalize(light_pos - pos_hit));
+    // 
+    // float shadow_factor = is_open_to_light ? 1.0 : 0.3;
+    // pixel_color.rgb *= shadow_factor;
+
+    // pixel_color.a = 1 - pixel_color.a;
 
     imageStore(out_tex, pos, pixel_color);
 }

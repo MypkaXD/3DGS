@@ -41,6 +41,7 @@ private:
 	Shader m_shader_compute_gaussian;
 	Shader m_shader_texture_draw;
 	Shader m_shader_bvh;
+	Shader m_shader_light_source;
 
 	// Camera settings
 	static Camera m_camera;
@@ -63,12 +64,16 @@ private:
 	unsigned int m_SSBO_gaussians_additional;
 	unsigned int m_SSBO_bvh_nodes;
 	unsigned int m_SSBO_bvh_ids;
-	
+
 	unsigned int m_EBO_BOX;
 	unsigned int m_VBO_BOX;
 
 	unsigned int m_VAO_BVH;
 	unsigned int m_VBO_BVH;
+
+	unsigned int m_VAO_LIGHT_SOURCE;
+	unsigned int m_VBO_LIGHT_SOURCE;
+	unsigned int m_EBO_LIGHT_SOURCE;
 
 	std::vector<AABB> m_bvh;
 	BVHGPU m_bvh_gpu;
@@ -98,6 +103,10 @@ public:
 		glDeleteBuffers(1, &m_EBO_BOX);
 		glDeleteBuffers(1, &m_VBO_BOX);
 		glDeleteBuffers(1, &m_VBO_BVH);
+
+		glDeleteVertexArrays(1, &m_VAO_LIGHT_SOURCE);
+		glDeleteBuffers(1, &m_VBO_LIGHT_SOURCE);
+		glDeleteBuffers(1, &m_EBO_LIGHT_SOURCE);
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -188,7 +197,7 @@ public:
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_additional);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_additional().size() * sizeof(Ellipsoid::EllipsoidAddtitional), m_loader.get_gaussians_additional().data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_gaussians_additional);
-			
+
 		glGenBuffers(1, &m_SSBO_bvh_nodes);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_bvh_nodes);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, m_bvh_gpu.nodes.size() * sizeof(BVHNodeGPU), m_bvh_gpu.nodes.data(), GL_STATIC_DRAW);
@@ -211,7 +220,7 @@ public:
 		glGenBuffers(1, &m_EBO_BOX);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO_BOX);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, 24 * sizeof(unsigned int), AABB::cube_indices, GL_STATIC_DRAW);
-		
+
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(AABB), (void*)0);
 		glEnableVertexAttribArray(0);
 
@@ -238,8 +247,30 @@ public:
 		GLint fov_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "fov");
 		GLint aspect_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "aspect");
 		GLint Q_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "Q");
+		GLint light_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "light_pos");
 
 		bool is_draw_bvh = false;
+
+		std::array<float, 3> light_pos = { 10.0f, 10.0f, 10.0f };
+
+		UV uv = UV(10, 10, 0.0f, 2.0f * M_PI, 0.0f, M_PI);
+		uv.generate();
+
+		glGenVertexArrays(1, &m_VAO_LIGHT_SOURCE);
+		glBindVertexArray(m_VAO_LIGHT_SOURCE);
+
+		glGenBuffers(1, &m_VBO_LIGHT_SOURCE);
+		glBindBuffer(GL_ARRAY_BUFFER, m_VBO_LIGHT_SOURCE);
+		glBufferData(GL_ARRAY_BUFFER, uv.get_vertices().size() * sizeof(float), uv.get_vertices().data(), GL_STATIC_DRAW);
+
+		glGenBuffers(1, &m_EBO_LIGHT_SOURCE);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO_LIGHT_SOURCE);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, uv.get_indices().size() * sizeof(unsigned int), uv.get_indices().data(), GL_STATIC_DRAW);
+
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+
+		glBindVertexArray(0);
 
 		while (!glfwWindowShouldClose(m_window))
 		{
@@ -249,6 +280,10 @@ public:
 			float currentFrame = static_cast<float>(glfwGetTime());
 			m_delta_time = currentFrame - m_last_frame;
 			m_last_frame = currentFrame;
+
+			light_pos[0] = 100.0f * cos(currentFrame);
+			light_pos[1] = 100.0f;
+			light_pos[2] = 100.0f * sin(currentFrame);
 
 			process_input(m_window);
 
@@ -269,6 +304,7 @@ public:
 			float aspect = (float)m_width / (float)m_height;
 			glUniform1f(aspect_loc, aspect);
 			glUniform1f(Q_loc, Ellipsoid::Q);
+			glUniform3f(light_pos_loc, light_pos[0], light_pos[1], light_pos[2]);
 			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -279,10 +315,10 @@ public:
 			glUniform1i(glGetUniformLocation(m_shader_texture_draw.get_id(), "compute_texture"), 0);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+			glClear(GL_DEPTH_BUFFER_BIT);
+			
 			if (is_draw_bvh)
 			{
-				glClear(GL_DEPTH_BUFFER_BIT);
-
 				m_shader_bvh.use();
 				glBindVertexArray(m_VAO_BVH);
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
@@ -292,6 +328,13 @@ public:
 				glDrawElementsInstanced(GL_LINES, 24, GL_UNSIGNED_INT, 0, m_bvh.size());
 			}
 
+			m_shader_light_source.use();
+			glBindVertexArray(m_VAO_LIGHT_SOURCE);
+			glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+			glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+			glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+			glUniform3f(glGetUniformLocation(m_shader_light_source.get_id(), "light_pos"), light_pos[0], light_pos[1], light_pos[2]);
+			glDrawElementsInstanced(GL_TRIANGLES, uv.get_indices().size(), GL_UNSIGNED_INT, 0, 1);
 
 
 			ImGui_ImplOpenGL3_NewFrame();
@@ -301,6 +344,7 @@ public:
 			ImGui::Begin("Settings");
 
 			ImGui::Text("FPS: %lf", fps);
+			ImGui::Text("Count of gaussians: %d", m_loader.get_gaussians_count());
 
 			ImGui::Checkbox("Draw BVH", &is_draw_bvh);
 
@@ -412,17 +456,24 @@ private:
 			std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_ray_tracing\\shaders\\fragment_shader_aabb.frag", GL_FRAGMENT_SHADER)
 		);
 		m_shader_bvh.link();
+
+		m_shader_light_source.create();
+		m_shader_light_source.load_shaders(
+			std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_ray_tracing\\shaders\\vertex_shader_light_source.vert", GL_VERTEX_SHADER),
+			std::make_pair("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_ray_tracing\\shaders\\fragment_shader_light_source.frag", GL_FRAGMENT_SHADER)
+		);
+		m_shader_light_source.link();
 	}
 
 	void init_gaussians()
 	{
 		// create scene
-		
-		m_loader.create_line();
-		
+
+		// m_loader.create_line();
+
 		// m_loader.create_cube();
 		// m_loader.create_random_scene(1000);
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
 
@@ -514,7 +565,7 @@ private:
 };
 
 
-Camera App::m_camera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera App::m_camera = Camera(glm::vec3(50.0f, 0.0f, 50.0f));
 
 float App::m_delta_time = 0.0f;
 float App::m_last_frame = 0.0f;

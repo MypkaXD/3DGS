@@ -179,16 +179,19 @@ public:
 			e_gen.mu[0] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
 			e_gen.mu[1] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
 			e_gen.mu[2] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
-			e_gen.sigma[0] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0];
-			e_gen.sigma[1] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1];
-			e_gen.sigma[2] = reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2];
+
+			e_gen.sigma[0] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0]);
+			e_gen.sigma[1] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1]);
+			e_gen.sigma[2] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2]);
 
 			float x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
 			float y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
 			float z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
 			float w = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
 
-			e_gen.rotation = get_rotation_matrix_from_quaternion(glm::vec4(x, y, z, w));
+			float length = std::sqrt(x * x + y * y + z * z + w * w);
+
+			e_gen.rotation = get_rotation_matrix_from_quaternion(glm::vec4(x / length, y / length, z / length, w / length));
 
 			glm::mat4 scale_invatiant_squared = glm::mat4(
 				1.0 / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
@@ -211,10 +214,10 @@ public:
 				}
 			}
 
-			// e_add.opacity = reinterpret_cast<float*>(opacity->buffer.get())[idx];
-			e_add.opacity = 0.2f;
-
-			std::cout << e_add.opacity << std::endl;
+			float opacity_value = reinterpret_cast<float*>(opacity->buffer.get())[idx];
+			opacity_value = (1.0 / (1.0 + std::exp(-opacity_value)));
+			e_add.opacity = opacity_value;
+			// e_add.opacity = 0.2f;
 
 			gaussians_general.emplace_back(e_gen);
 			gaussians_addiotional.emplace_back(e_add);
@@ -298,7 +301,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 0.2f;
+					e_add.opacity = 1.0f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
@@ -353,7 +356,7 @@ public:
 						e_add.sh_add[sh_idx] = 0.0f;
 					}
 
-					e_add.opacity = 0.2f;
+					e_add.opacity = 1.0f;
 
 					gaussians_general.emplace_back(e_gen);
 					gaussians_addiotional.emplace_back(e_add);
@@ -400,9 +403,24 @@ public:
 			//e_add.sh_main[1] = 1.78f;
 			//e_add.sh_main[2] = 1.78f;
 
-			e_add.sh_main[0] = dis_uniform(gen);
-			e_add.sh_main[1] = dis_uniform(gen);
-			e_add.sh_main[2] = dis_uniform(gen);
+			if (j % 3 == 0)
+			{
+				e_add.sh_main[0] = -1.78f;
+				e_add.sh_main[1] = 1.78f;
+				e_add.sh_main[2] = -1.78f;
+			}
+			else if (j % 3 == 1)
+			{
+				e_add.sh_main[0] = 1.78f;
+				e_add.sh_main[1] = -1.78f;
+				e_add.sh_main[2] = -1.78f;
+			}
+			else
+			{
+				e_add.sh_main[0] = -1.78f;
+				e_add.sh_main[1] = -1.78f;
+				e_add.sh_main[2] = 1.78f;
+			}
 
 			for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 			{
