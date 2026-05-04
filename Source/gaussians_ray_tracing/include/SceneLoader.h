@@ -184,6 +184,20 @@ public:
 			e_gen.sigma[1] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1]);
 			e_gen.sigma[2] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2]);
 
+			std::cout << "Mu:" << std::endl;
+			std::cout << e_gen.mu[0] << std::endl;
+			std::cout << e_gen.mu[1] << std::endl;
+			std::cout << e_gen.mu[2] << std::endl;
+			std::cout << "Sigma:" << std::endl;
+			std::cout << e_gen.sigma[0] << std::endl;
+			std::cout << e_gen.sigma[1] << std::endl;
+			std::cout << e_gen.sigma[2] << std::endl;
+			std::cout << "Scale^-2" << std::endl;
+			std::cout << 1.0 / (e_gen.sigma[0] * e_gen.sigma[0]) << std::endl;
+			std::cout << 1.0 / (e_gen.sigma[1] * e_gen.sigma[1]) << std::endl;
+			std::cout << 1.0 / (e_gen.sigma[2] * e_gen.sigma[2]) << std::endl;
+			std::cout << "------" << std::endl;
+
 			float x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
 			float y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
 			float z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];

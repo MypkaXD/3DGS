@@ -475,7 +475,7 @@ private:
 		// m_loader.create_random_scene(1000);
 		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\827a55cb-5\\point_cloud\\iteration_7000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\a3be6993-c\\point_cloud\\iteration_10000\\point_cloud.ply");
 
 		std::cout << m_loader.get_gaussians_count() << " gaussians loaded." << std::endl;
 

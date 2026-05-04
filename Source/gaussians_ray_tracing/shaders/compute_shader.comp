@@ -5,28 +5,28 @@ layout(rgba32f, binding = 0) uniform image2D out_tex;
 
 struct EllipsoidGeneral
 {
-	vec4 mu;
-	vec4 sigma;
-	mat4 rotation;
-	mat4 covariance_invariant;
+    vec4 mu;
+    vec4 sigma;
+    mat4 rotation;
+    mat4 covariance_invariant;
 };
 
 struct EllipsoidAddtitional
 {
-	float sh_main[3];
-	float sh_add[45];
-	float opacity;
+    float sh_main[3];
+    float sh_add[45];
+    float opacity;
 };
 
 struct BVH_Node
 {
-	float bounds[6];
+    float bounds[6];
 
-	int index_left;
-	int index_right;
+    int index_left;
+    int index_right;
 
-	int primitive_counts;
-	int primitive_index;
+    int primitive_counts;
+    int primitive_index;
 };
 
 layout(std430, binding = 1) buffer EllipsoidsGeneral
@@ -64,16 +64,15 @@ bool intersectRayAABB(vec3 origin, vec3 dir, vec3 bounds_min, vec3 bounds_max, i
 
     vec3 t1 = (bounds_min - origin) * inv_dir;
     vec3 t2 = (bounds_max - origin) * inv_dir;
-    
+
     vec3 tmin_vec = min(t1, t2);
     vec3 tmax_vec = max(t1, t2);
-    
+
     float tmin = max(max(tmin_vec.x, tmin_vec.y), tmin_vec.z);
     float tmax = min(min(tmax_vec.x, tmax_vec.y), tmax_vec.z);
 
     t = tmin;
-
-    return tmin <= tmax && tmax > 0.0;
+    return tmax >= max(tmin, 0.0);
 }
 
 struct HitInfo
@@ -83,118 +82,86 @@ struct HitInfo
     uint ellipsoid_index;
 };
 
-// bool is_open_to_light_source(vec3 ray_origin, vec3 ray_dir)
-// {
-//     int stack[64];
-//     int stack_ptr = 0;
-// 
-//     stack[stack_ptr] = 0;
-//     ++stack_ptr;
-// 
-//     float stored_opacity = 0.0;
-// 
-//     while (stack_ptr > 0)
-//     {
-//         if (stored_opacity >= 1.0)
-//             return false;
-// 
-//         stack_ptr--;
-//         int node_index = stack[stack_ptr];
-// 
-//         BVH_Node node = nodes[node_index];
-// 
-//         if (node.primitive_index != -1) // Leaf node
-//         {
-//             HitInfo closest_hit[8];
-//             int hit_count = 0;
-// 
-//             for (int i = node.primitive_index; i < node.primitive_index + node.primitive_counts; i++)
-//             {
-//                 uint ell_idx = prim_ids[i];
-//                 EllipsoidGeneral ell_gen = ellipsoid_general[ell_idx];
-//         
-//                 vec3 oc = ray_origin - ell_gen.mu.xyz;
-//                 mat3 temp = mat3(ell_gen.covariance_invariant);
-//                 float a = dot(ray_dir, temp * ray_dir);
-//                 float b = 2.0 * dot(oc, temp * ray_dir);
-//                 float c = dot(oc, temp * oc) - Q;
-//         
-//                 float discriminant = b * b - 4.0 * a * c;
-//         
-//                 if (discriminant >= 0.0)
-//                 {
-//                     float sqrt_disc = sqrt(discriminant);
-//                     float t1 = (-b - sqrt_disc) / (2.0 * a);
-//                     float t2 = (-b + sqrt_disc) / (2.0 * a);
-//             
-//                     float t = -1.0;
-//                     if (t1 > 0.0 && t2 > 0.0) {
-//                         t = min(t1, t2);
-//                     } else if (t1 > 0.0) {
-//                         t = t1;
-//                     } else if (t2 > 0.0) {
-//                         t = t2;
-//                     }
-//             
-//                     if (t > 0.0)
-//                     {
-//                         stored_opacity += clamp(ellipsoid_addtitional[ell_idx].opacity, 0.0, 1.0);
-//                     }
-//                 }
-//             }
-//         }
-//         else
-//         {
-//             BVH_Node left = nodes[node.index_left]; // get left child
-//             BVH_Node right = nodes[node.index_right]; // get right child
-// 
-//             float t_left;
-//             float t_right;
-// 
-//             bool hit_left = intersectRayAABB(ray_origin, ray_dir, vec3(left.bounds[0], left.bounds[2], left.bounds[4]), vec3(left.bounds[1], left.bounds[3], left.bounds[5]), t_left);
-//             bool hit_right = intersectRayAABB(ray_origin, ray_dir, vec3(right.bounds[0], right.bounds[2], right.bounds[4]), vec3(right.bounds[1], right.bounds[3], right.bounds[5]), t_right);
-// 
-//             if (!hit_left && !hit_right) 
-//             {
-//                 continue;
-//             }
-// 
-//             bool left_first = (t_left < t_right) && hit_left;
-// 
-//             int left_idx = node.index_left;
-//             int right_idx = node.index_right;
-// 
-//             if (hit_right && !left_first) {
-//                 stack[stack_ptr] = right_idx;
-//                 stack_ptr++;
-//             }
-//             if (hit_left && left_first) {
-//                 stack[stack_ptr] = left_idx;
-//                 stack_ptr++;
-//             }
-// 
-//             if (hit_left && !left_first) {
-//                 stack[stack_ptr] = left_idx;
-//                 stack_ptr++;
-//             }
-//             if (hit_right && left_first) {
-//                 stack[stack_ptr] = right_idx;
-//                 stack_ptr++;
-//             }
-//         }
-//     }
-// 
-//     return stored_opacity < 1.0;
-// }
-
-void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color, inout float far_t)
+vec3 eval_sh(vec3 dir, EllipsoidAddtitional ell)
 {
+    float x = dir.x;
+    float y = dir.y;
+    float z = dir.z;
 
+    vec3 result = vec3(0.0);
+
+    // --- l = 0 ---
+    result += 0.2820947918 * vec3(
+        ell.sh_main[0],
+        ell.sh_main[1],
+        ell.sh_main[2]
+    );
+
+    int idx = 0;
+
+    // --- l = 1 ---
+    float sh1[3] = float[3](
+        -0.4886025119 * y,
+         0.4886025119 * z,
+        -0.4886025119 * x
+    );
+
+    for (int i = 0; i < 3; i++)
+    {
+        result += sh1[i] * vec3(
+            ell.sh_add[idx++],
+            ell.sh_add[idx++],
+            ell.sh_add[idx++]
+        );
+    }
+
+    // --- l = 2 ---
+    float sh2[5] = float[5](
+        1.0925484306 * x * y,
+       -1.0925484306 * y * z,
+        0.3153915653 * (3.0*z*z - 1.0),
+       -1.0925484306 * x * z,
+        0.5462742153 * (x*x - y*y)
+    );
+
+    for (int i = 0; i < 5; i++)
+    {
+        result += sh2[i] * vec3(
+            ell.sh_add[idx++],
+            ell.sh_add[idx++],
+            ell.sh_add[idx++]
+        );
+    }
+
+    // --- l = 3 ---
+    float sh3[7] = float[7](
+        -0.5900435899 * y * (3.0*x*x - y*y),
+         2.8906114426 * x * y * z,
+        -0.4570457995 * y * (5.0*z*z - 1.0),
+         0.3731763325 * z * (5.0*z*z - 3.0),
+        -0.4570457995 * x * (5.0*z*z - 1.0),
+         1.4453057213 * z * (x*x - y*y),
+        -0.5900435899 * x * (x*x - 3.0*y*y)
+    );
+
+    for (int i = 0; i < 7; i++)
+    {
+        result += sh3[i] * vec3(
+            ell.sh_add[idx++],
+            ell.sh_add[idx++],
+            ell.sh_add[idx++]
+        );
+    }
+
+    return result;
+}
+
+void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color)
+{
     int stack[64];
     int stack_ptr = 0;
 
-    stack[stack_ptr] = 0;
-    ++stack_ptr;
+    stack[stack_ptr++] = 0;
 
     while (stack_ptr > 0)
     {
@@ -203,7 +170,7 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color, inout f
 
         BVH_Node node = nodes[node_index];
 
-        if (node.primitive_index != -1) // Leaf node
+        if (node.primitive_index != -1) // leaf
         {
             HitInfo closest_hit[8];
             int hit_count = 0;
@@ -212,48 +179,42 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color, inout f
             {
                 uint ell_idx = prim_ids[i];
                 EllipsoidGeneral ell_gen = ellipsoid_general[ell_idx];
-        
+
                 vec3 oc = ray_origin - ell_gen.mu.xyz;
                 mat3 temp = mat3(ell_gen.covariance_invariant);
+
                 float a = dot(ray_dir, temp * ray_dir);
+                if (abs(a) < 1e-6) continue;
+
                 float b = 2.0 * dot(oc, temp * ray_dir);
                 float c = dot(oc, temp * oc) - Q;
-        
+
                 float discriminant = b * b - 4.0 * a * c;
-        
-                if (discriminant >= 0.0)
+                if (discriminant < 0.0) continue;
+
+                float sqrt_disc = sqrt(discriminant);
+                float t1 = (-b - sqrt_disc) / (2.0 * a);
+                float t2 = (-b + sqrt_disc) / (2.0 * a);
+
+                float t = -1.0;
+                if (t1 > 0.0 && t2 > 0.0) t = min(t1, t2);
+                else if (t1 > 0.0) t = t1;
+                else if (t2 > 0.0) t = t2;
+
+                if (t > 0.0)
                 {
-                    float sqrt_disc = sqrt(discriminant);
-                    float t1 = (-b - sqrt_disc) / (2.0 * a);
-                    float t2 = (-b + sqrt_disc) / (2.0 * a);
-            
-                    float t = -1.0;
-                    if (t1 > 0.0 && t2 > 0.0) {
-                        t = min(t1, t2);
-                    } else if (t1 > 0.0) {
-                        t = t1;
-                    } else if (t2 > 0.0) {
-                        t = t2;
-                    }
-            
-                    if (t > 0.0)
+                    float t_peak = -b / (2.0 * a);
+
+                    vec3 point_on_ray = ray_origin + ray_dir * t_peak;
+                    vec3 diff = point_on_ray - ell_gen.mu.xyz;
+                    float mahalanobis_sq = dot(diff, temp * diff);
+
+                    if (hit_count < 8)
                     {
                         closest_hit[hit_count].t = t;
-                        closest_hit[hit_count].ellipsoid_index = ell_idx;
-
-                        // float t_peak = -b / (2.0 * a);
-                        // float f_peak = c - (b * b) / (4.0 * a);
-                        // closest_hit[hit_count].response = exp(-0.5 * f_peak);
-
-                        float t_peak = -b / (2.0 * a);
-                        vec3 point_on_ray = ray_origin + ray_dir * t_peak;
-                        vec3 diff = point_on_ray - ell_gen.mu.xyz;
-                        
-                        float mahalanobis_sq = dot(diff, temp * diff);
-                        
                         closest_hit[hit_count].response = exp(-0.5 * mahalanobis_sq);
-
-                        ++hit_count;
+                        closest_hit[hit_count].ellipsoid_index = ell_idx;
+                        hit_count++;
                     }
                 }
             }
@@ -261,74 +222,83 @@ void traverse_bvh(vec3 ray_origin, vec3 ray_dir, inout vec4 pixel_color, inout f
             if (hit_count == 0)
                 continue;
 
+            // sort by depth
             for (int i = 0; i < hit_count - 1; i++)
             {
                 for (int j = 0; j < hit_count - i - 1; j++)
                 {
                     if (closest_hit[j].t > closest_hit[j + 1].t)
                     {
-                        HitInfo temp = closest_hit[j];
+                        HitInfo tmp = closest_hit[j];
                         closest_hit[j] = closest_hit[j + 1];
-                        closest_hit[j + 1] = temp;
+                        closest_hit[j + 1] = tmp;
                     }
                 }
             }
 
             for (int i = 0; i < hit_count; i++)
-            {                
+            {
                 EllipsoidAddtitional ell_add = ellipsoid_addtitional[closest_hit[i].ellipsoid_index];
 
-                vec3 color = vec3(
-                    clamp(0.2820947918 * ell_add.sh_main[0] + 0.5, 0, 1),
-                    clamp(0.2820947918 * ell_add.sh_main[1] + 0.5, 0, 1),
-                    clamp(0.2820947918 * ell_add.sh_main[2] + 0.5, 0, 1)
-                );
+                vec3 hit_pos  = ray_origin + closest_hit[i].t * ray_dir;
+                vec3 view_dir = normalize(camera_pos - hit_pos);
+                
+                vec3 color = eval_sh(view_dir, ell_add);
 
-                float alpha = ell_add.opacity * closest_hit[i].response;
+                // обычно SH может давать отрицательные значения
+                color = clamp(color + 0.5, 0.0, 1.0);
+
+                float alpha = clamp(ell_add.opacity * closest_hit[i].response, 0.0, 1.0);
 
                 pixel_color.rgb += color * alpha * pixel_color.a;
                 pixel_color.a *= (1.0 - alpha);
+
+                if (pixel_color.a < 0.01)
+                    return;
             }
         }
         else
         {
-            BVH_Node left = nodes[node.index_left]; // get left child
-            BVH_Node right = nodes[node.index_right]; // get right child
+            BVH_Node left = nodes[node.index_left];
+            BVH_Node right = nodes[node.index_right];
 
-            float t_left;
-            float t_right;
+            float t_left, t_right;
 
-            bool hit_left = intersectRayAABB(ray_origin, ray_dir, vec3(left.bounds[0], left.bounds[2], left.bounds[4]), vec3(left.bounds[1], left.bounds[3], left.bounds[5]), t_left);
-            bool hit_right = intersectRayAABB(ray_origin, ray_dir, vec3(right.bounds[0], right.bounds[2], right.bounds[4]), vec3(right.bounds[1], right.bounds[3], right.bounds[5]), t_right);
+            vec3 lmin = vec3(left.bounds[0], left.bounds[2], left.bounds[4]);
+            vec3 lmax = vec3(left.bounds[1], left.bounds[3], left.bounds[5]);
 
-            if (!hit_left && !hit_right) 
-            {
+            vec3 rmin = vec3(right.bounds[0], right.bounds[2], right.bounds[4]);
+            vec3 rmax = vec3(right.bounds[1], right.bounds[3], right.bounds[5]);
+
+            bool hit_left = intersectRayAABB(ray_origin, ray_dir, lmin, lmax, t_left);
+            bool hit_right = intersectRayAABB(ray_origin, ray_dir, rmin, rmax, t_right);
+
+            if (!hit_left && !hit_right)
                 continue;
-            }
 
-            bool left_first = (t_left < t_right) && hit_left;
+            bool left_first = (t_left < t_right);
 
-            int left_idx = node.index_left;
-            int right_idx = node.index_right;
-
-            if (hit_right && !left_first) {
-                stack[stack_ptr] = right_idx;
-                stack_ptr++;
+            if (hit_left && hit_right)
+            {
+                if (left_first)
+                {
+                    if (stack_ptr < 63) stack[stack_ptr++] = node.index_right;
+                    if (stack_ptr < 63) stack[stack_ptr++] = node.index_left;
+                }
+                else
+                {
+                    if (stack_ptr < 63) stack[stack_ptr++] = node.index_left;
+                    if (stack_ptr < 63) stack[stack_ptr++] = node.index_right;
+                }
             }
-            if (hit_left && left_first) {
-                stack[stack_ptr] = left_idx;
-                stack_ptr++;
+            else if (hit_left)
+            {
+                if (stack_ptr < 63) stack[stack_ptr++] = node.index_left;
             }
-
-            if (hit_left && !left_first) {
-                stack[stack_ptr] = left_idx;
-                stack_ptr++;
+            else if (hit_right)
+            {
+                if (stack_ptr < 63) stack[stack_ptr++] = node.index_right;
             }
-            if (hit_right && left_first) {
-                stack[stack_ptr] = right_idx;
-                stack_ptr++;
-            }
-            
         }
     }
 }
@@ -337,36 +307,32 @@ void main()
 {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(out_tex);
-    
-    if (pos.x >= size.x || pos.y >= size.y) 
+
+    if (pos.x >= size.x || pos.y >= size.y)
         return;
 
     vec2 ndc = vec2(
-        float(pos.x) * 2.0 / float(size.x) - 1.0, 
+        float(pos.x) * 2.0 / float(size.x) - 1.0,
         1.0 - float(pos.y) * 2.0 / float(size.y)
     );
-    
-    float tan_fov = tan(radians(fov) / 2.0);
-    vec2 ray_dir_ndc = ndc;
-    ray_dir_ndc.x *= aspect * tan_fov;
-    ray_dir_ndc.y *= tan_fov;
-    
-    vec3 ray_dir = normalize(camera_front + camera_right * ray_dir_ndc.x - camera_up * ray_dir_ndc.y);
-    
+
+    float tan_fov = tan(radians(fov) * 0.5);
+
+    vec2 ray_ndc;
+    ray_ndc.x = ndc.x * aspect * tan_fov;
+    ray_ndc.y = ndc.y * tan_fov;
+
+    vec3 ray_dir = normalize(
+        camera_front +
+        camera_right * ray_ndc.x -
+        camera_up * ray_ndc.y
+    );
+
     vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
 
-    float t = 0.0;
+    traverse_bvh(camera_pos, ray_dir, pixel_color);
 
-    traverse_bvh(camera_pos, ray_dir, pixel_color, t);
-    
-    // vec3 pos_hit = camera_pos + ray_dir * t;
-    //             
-    // bool is_open_to_light = is_open_to_light_source(pos_hit, normalize(light_pos - pos_hit));
-    // 
-    // float shadow_factor = is_open_to_light ? 1.0 : 0.3;
-    // pixel_color.rgb *= shadow_factor;
-
-    // pixel_color.a = 1 - pixel_color.a;
+    pixel_color.a = 1.0 - pixel_color.a;
 
     imageStore(out_tex, pos, pixel_color);
 }
