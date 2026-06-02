@@ -5,7 +5,7 @@
 
 namespace Ellipsoid
 {
-	float Q = 10.0f;
+	float Q = 7.91f;
 
 	struct EllipsoidGeneral
 	{

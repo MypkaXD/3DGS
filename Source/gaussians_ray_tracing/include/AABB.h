@@ -46,14 +46,14 @@ private:
     {
         float denominator =
             std::sqrt(
-                ellipsoid.rotation[0][idx] * ellipsoid.rotation[0][idx] * ellipsoid.sigma[0] * ellipsoid.sigma[0] +
-                ellipsoid.rotation[1][idx] * ellipsoid.rotation[1][idx] * ellipsoid.sigma[1] * ellipsoid.sigma[1] +
-                ellipsoid.rotation[2][idx] * ellipsoid.rotation[2][idx] * ellipsoid.sigma[2] * ellipsoid.sigma[2]
+                ellipsoid.rotation[idx][0] * ellipsoid.rotation[idx][0] * ellipsoid.sigma[0] * ellipsoid.sigma[0] +
+                ellipsoid.rotation[idx][1] * ellipsoid.rotation[idx][1] * ellipsoid.sigma[1] * ellipsoid.sigma[1] +
+                ellipsoid.rotation[idx][2] * ellipsoid.rotation[idx][2] * ellipsoid.sigma[2] * ellipsoid.sigma[2]
             );
 
-        float local_x = (ellipsoid.rotation[0][idx] * ellipsoid.sigma[0] * ellipsoid.sigma[0] * std::sqrt(Q)) / denominator;
-        float local_y = (ellipsoid.rotation[1][idx] * ellipsoid.sigma[1] * ellipsoid.sigma[1] * std::sqrt(Q)) / denominator;
-        float local_z = (ellipsoid.rotation[2][idx] * ellipsoid.sigma[2] * ellipsoid.sigma[2] * std::sqrt(Q)) / denominator;
+        float local_x = (ellipsoid.rotation[idx][0] * ellipsoid.sigma[0] * ellipsoid.sigma[0] * std::sqrt(Q)) / denominator;
+        float local_y = (ellipsoid.rotation[idx][1] * ellipsoid.sigma[1] * ellipsoid.sigma[1] * std::sqrt(Q)) / denominator;
+        float local_z = (ellipsoid.rotation[idx][2] * ellipsoid.sigma[2] * ellipsoid.sigma[2] * std::sqrt(Q)) / denominator;
 
         return glm::vec3(local_x, local_y, local_z);
     }

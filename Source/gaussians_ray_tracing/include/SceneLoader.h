@@ -55,7 +55,7 @@ public:
 
 			float norm = std::sqrt(x * x + y * y + z * z + w * w);
 
-			e_gen.rotation = get_rotation_matrix_from_quaternion(glm::vec4(x / norm, y / norm, z / norm, w / norm));
+			e_gen.rotation = get_rotation_matrix_from_quaternion(glm::vec4(w / norm, x / norm, y / norm, z / norm));
 
 			glm::mat4 scale_invatiant_squared = glm::mat4(
 				1.0 / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
@@ -171,20 +171,35 @@ public:
 		if (f_dc)     std::cout << "\tRead " << f_dc->count << " total sh f_dc " << std::endl;
 		if (f_rest)   std::cout << "\tRead " << f_rest->count << " total sh f_rest " << std::endl;
 
+		std::ofstream dump_file("dump.txt");
+
 		for (std::size_t idx = 0; idx < xyz->count; ++idx)
 		{
+			dump_file << idx << "\n";
+
 			Ellipsoid::EllipsoidGeneral e_gen;
 			Ellipsoid::EllipsoidAddtitional e_add;
 
 			e_gen.mu[0] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 0];
 			e_gen.mu[1] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 1];
 			e_gen.mu[2] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
+			e_gen.mu[3] = 1.0f;
+
+			dump_file << "pos\n";
+			dump_file << "pos_x=" << e_gen.mu[0] << "\n";
+			dump_file << "pos_y=" << e_gen.mu[1] << "\n";
+			dump_file << "pos_z=" << e_gen.mu[2] << "\n";
 
 			e_gen.sigma[0] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0]);
 			e_gen.sigma[1] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1]);
 			e_gen.sigma[2] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2]);
 
-			std::cout << "Mu:" << std::endl;
+			dump_file << "scale:\n";
+			dump_file << "sx=" << e_gen.sigma[0] << "\n";
+			dump_file << "sy=" << e_gen.sigma[1] << "\n";
+			dump_file << "sz=" << e_gen.sigma[2] << "\n";
+
+			/*std::cout << "Mu:" << std::endl;
 			std::cout << e_gen.mu[0] << std::endl;
 			std::cout << e_gen.mu[1] << std::endl;
 			std::cout << e_gen.mu[2] << std::endl;
@@ -196,16 +211,41 @@ public:
 			std::cout << 1.0 / (e_gen.sigma[0] * e_gen.sigma[0]) << std::endl;
 			std::cout << 1.0 / (e_gen.sigma[1] * e_gen.sigma[1]) << std::endl;
 			std::cout << 1.0 / (e_gen.sigma[2] * e_gen.sigma[2]) << std::endl;
-			std::cout << "------" << std::endl;
+			std::cout << "------" << std::endl;*/
 
-			float x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
-			float y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
-			float z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
-			float w = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
+			float w = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 0];
+			float x = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 1];
+			float y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
+			float z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
 
-			float length = std::sqrt(x * x + y * y + z * z + w * w);
+			dump_file << "rotation:\n";
+			dump_file << "w=" << w << "\n";
+			dump_file << "x=" << x << "\n";
+			dump_file << "y=" << y << "\n";
+			dump_file << "z=" << z << "\n";
 
-			e_gen.rotation = get_rotation_matrix_from_quaternion(glm::vec4(x / length, y / length, z / length, w / length));
+			glm::quat q = glm::normalize(glm::quat(w, x, y, z));
+			e_gen.rotation = glm::mat4_cast(q);
+
+			static bool test = true;
+			if (test)
+			{
+				std::cout << "Rotation matrix:" << std::endl;
+				for (int row = 0; row < 4; row++) {
+					for (int col = 0; col < 4; col++) {
+						std::cout << e_gen.rotation[row][col] << " ";
+					}
+					std::cout << std::endl;
+				}
+				for (int row = 0; row < 4; row++) {
+					for (int col = 0; col < 4; col++) {
+						std::cout << e_gen.rotation[col][row] << " ";
+					}
+					std::cout << std::endl;
+				}
+				std::cout << e_gen.rotation << std::endl;
+				test = false;
+			}
 
 			glm::mat4 scale_invatiant_squared = glm::mat4(
 				1.0 / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
@@ -220,10 +260,19 @@ public:
 			e_add.sh_main[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
 			e_add.sh_main[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
 
+			dump_file << "main_color:\n";
+			dump_file << "r=" << e_add.sh_main[0] << "\n";
+			dump_file << "g=" << e_add.sh_main[1] << "\n";
+			dump_file << "b=" << e_add.sh_main[2] << "\n";
+
 			if (f_rest)
 			{
 				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 				{
+					dump_file << "add_color_" << sh_idx / 3 << ":\n";
+					dump_file << "a=" << "\n";
+					dump_file << "b=" << "\n";
+					dump_file << "c=" << "\n";
 					e_add.sh_add[sh_idx] = 0.0f;
 				}
 			}
@@ -236,6 +285,8 @@ public:
 			gaussians_general.emplace_back(e_gen);
 			gaussians_addiotional.emplace_back(e_add);
 		}
+
+		dump_file.close();
 	}
 
 	void create_cube()
@@ -274,10 +325,10 @@ public:
 			{
 				for (std::size_t j = 0; j < n; ++j)
 				{
-					// Создаём координату
+					// пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 					glm::vec3 coord;
 
-					// Две свободные оси получают значения i и j
+					// пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ i пїЅ j
 					int free_axis1 = (face.fixed_axis + 1) % 3;
 					int free_axis2 = (face.fixed_axis + 2) % 3;
 
@@ -285,7 +336,7 @@ public:
 					coord[free_axis1] = cube_min[free_axis1] + step[free_axis1] * float(i);
 					coord[free_axis2] = cube_min[free_axis2] + step[free_axis2] * float(j);
 
-					// Создаём эллипсоид
+					// пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 					Ellipsoid::EllipsoidGeneral e_gen;
 					Ellipsoid::EllipsoidAddtitional e_add;
 
@@ -329,10 +380,10 @@ public:
 			{
 				for (std::size_t j = 0; j < n; ++j)
 				{
-					// Создаём координату
+					// пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 					glm::vec3 coord;
 
-					// Две свободные оси получают значения i и j
+					// пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ i пїЅ j
 					int free_axis1 = (face.fixed_axis + 1) % 3;
 					int free_axis2 = (face.fixed_axis + 2) % 3;
 
@@ -340,7 +391,7 @@ public:
 					coord[free_axis1] = cube_min[free_axis1] + step[free_axis1] * float(i);
 					coord[free_axis2] = cube_min[free_axis2] + step[free_axis2] * float(j);
 
-					// Создаём эллипсоид
+					// пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 					Ellipsoid::EllipsoidGeneral e_gen;
 					Ellipsoid::EllipsoidAddtitional e_add;
 
@@ -458,30 +509,10 @@ public:
 
 private:
 
-	glm::mat3 get_rotation_matrix_from_quaternion(const glm::vec4& quaternion)
+	glm::mat4 get_rotation_matrix_from_quaternion(const glm::vec4& quaternion)
 	{
-		float x = quaternion[0];
-		float y = quaternion[1];
-		float z = quaternion[2];
-		float w = quaternion[3];
-
-		float xx = x * x;
-		float xy = x * y;
-		float xz = x * z;
-		float xw = x * w;
-
-		float yy = y * y;
-		float yz = y * z;
-		float yw = y * w;
-
-		float zz = z * z;
-		float zw = z * w;
-
-		return glm::mat3{
-			1.0 - 2.0 * (yy + zz), 2.0 * (xy - zw), 2.0 * (xz + yw),
-			2.0 * (xy + zw), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - xw),
-			2.0 * (xz - yw), 2.0 * (yz + xw), 1.0 - 2.0 * (xx + yy)
-		};
+		glm::quat q(quaternion);
+		return glm::mat4_cast(q);
 	}
 
 };

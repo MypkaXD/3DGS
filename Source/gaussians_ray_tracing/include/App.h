@@ -20,6 +20,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/io.hpp> 
+
 #include <UV.h>
 #include <SceneLoader.h>
 #include <AABB.h>
@@ -213,9 +216,15 @@ public:
 		glGenVertexArrays(1, &m_VAO_BVH);
 		glBindVertexArray(m_VAO_BVH);
 
+
+		std::vector<AABB> aabb;
+		generate_AABB_from_gaussians(m_loader.get_gaussians_general(), aabb);
+
 		glGenBuffers(1, &m_VBO_BVH);
 		glBindBuffer(GL_ARRAY_BUFFER, m_VBO_BVH);
-		glBufferData(GL_ARRAY_BUFFER, m_bvh.size() * sizeof(AABB), m_bvh.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, (m_bvh.size() + aabb.size()) * sizeof(AABB), nullptr, GL_STATIC_DRAW);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, m_bvh.size() * sizeof(AABB), m_bvh.data());
+		glBufferSubData(GL_ARRAY_BUFFER, m_bvh.size() * sizeof(AABB), aabb.size() * sizeof(AABB), aabb.data());
 
 		glGenBuffers(1, &m_EBO_BOX);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO_BOX);
@@ -250,6 +259,7 @@ public:
 		GLint light_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "light_pos");
 
 		bool is_draw_bvh = false;
+		bool is_draw_aabb = false;
 
 		std::array<float, 3> light_pos = { 10.0f, 10.0f, 10.0f };
 
@@ -325,7 +335,18 @@ public:
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
 				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 1.0f, 1.0f, 1.0f);
-				glDrawElementsInstanced(GL_LINES, 24, GL_UNSIGNED_INT, 0, m_bvh.size());
+				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, m_bvh.size(), 0);
+			}
+
+			if (is_draw_aabb)
+			{
+				m_shader_bvh.use();
+				glBindVertexArray(m_VAO_BVH);
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 1.0f, 1.0f, 1.0f);
+				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, aabb.size(), m_bvh.size());
 			}
 
 			m_shader_light_source.use();
@@ -347,6 +368,7 @@ public:
 			ImGui::Text("Count of gaussians: %d", m_loader.get_gaussians_count());
 
 			ImGui::Checkbox("Draw BVH", &is_draw_bvh);
+			ImGui::Checkbox("Draw AABB", &is_draw_aabb);
 
 			ImGui::End();
 
@@ -472,8 +494,12 @@ private:
 		// m_loader.create_line();
 
 		// m_loader.create_cube();
-		// m_loader.create_random_scene(1000);
-		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
+		// m_loader.create_random_scene(200);
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\tractor\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
+		m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\point_cloud.ply");
+		//m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\a3be6993-c\\point_cloud\\iteration_10000\\point_cloud.ply");
 
