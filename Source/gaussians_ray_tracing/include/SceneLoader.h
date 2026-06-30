@@ -40,13 +40,13 @@ public:
 			Ellipsoid::EllipsoidGeneral e_gen;
 			Ellipsoid::EllipsoidAddtitional e_add;
 
-			e_gen.mu[0] = dis_mu(gen);
-			e_gen.mu[1] = dis_mu(gen);
-			e_gen.mu[2] = dis_mu(gen);
+			e_gen.mu[0] = 0.0f;
+			e_gen.mu[1] = 0.0f;
+			e_gen.mu[2] = 0.0f;
 
-			e_gen.sigma[0] = dis_sigma(gen);
-			e_gen.sigma[1] = dis_sigma(gen);
-			e_gen.sigma[2] = dis_sigma(gen);
+			e_gen.sigma[0] = 0.000001f;
+			e_gen.sigma[1] = 2.5f;
+			e_gen.sigma[2] = 2.5f;
 
 			float x = dis_normal(gen);
 			float y = dis_normal(gen);
@@ -64,7 +64,15 @@ public:
 				0.0f, 0.0f, 0.0f, 1.0f
 			);
 
-			e_gen.covariance_invariant = e_gen.rotation * scale_invatiant_squared * glm::transpose(e_gen.rotation);
+			// e_gen.covariance_invariant = e_gen.rotation * scale_invatiant_squared * glm::transpose(e_gen.rotation);
+			e_gen.covariance_invariant =glm::mat4(
+				1.0 / (e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0 / (e_gen.sigma[1]), 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0 / (e_gen.sigma[2]), 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			) * glm::transpose(e_gen.rotation);
+
+			std::cout << e_gen.covariance_invariant << std::endl;
 
 			e_add.sh_main[0] = dis_uniform_0_to_1(gen);
 			e_add.sh_main[1] = dis_uniform_0_to_1(gen);
@@ -194,6 +202,13 @@ public:
 			e_gen.sigma[1] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1]);
 			e_gen.sigma[2] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 2]);
 
+			//float eps = 1e-3f;
+
+			//e_gen.sigma[0] = e_gen.sigma[0] < eps ? eps : e_gen.sigma[0];
+			//e_gen.sigma[1] = e_gen.sigma[1] < eps ? eps : e_gen.sigma[1];
+			//e_gen.sigma[2] = e_gen.sigma[2] < eps ? eps : e_gen.sigma[2];
+
+
 			dump_file << "scale:\n";
 			dump_file << "sx=" << e_gen.sigma[0] << "\n";
 			dump_file << "sy=" << e_gen.sigma[1] << "\n";
@@ -248,17 +263,29 @@ public:
 			}
 
 			glm::mat4 scale_invatiant_squared = glm::mat4(
-				1.0 / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0 / (e_gen.sigma[1] * e_gen.sigma[1]), 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0 / (e_gen.sigma[2] * e_gen.sigma[2]), 0.0f,
+				1.0f / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f / (e_gen.sigma[1] * e_gen.sigma[1]), 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f / (e_gen.sigma[2] * e_gen.sigma[2]), 0.0f,
 				0.0f, 0.0f, 0.0f, 1.0f
 			);
 
-			e_gen.covariance_invariant = e_gen.rotation * scale_invatiant_squared * glm::transpose(e_gen.rotation);
+			// e_gen.covariance_invariant = e_gen.rotation * scale_invatiant_squared * glm::transpose(e_gen.rotation);
+			e_gen.covariance_invariant = glm::mat4(
+				1.0 / (e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0 / (e_gen.sigma[1]), 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0 / (e_gen.sigma[2]), 0.0f,
+				0.0f, 0.0f, 0.0f, 1.0f
+			) * glm::transpose(e_gen.rotation);
 
-			e_add.sh_main[0] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0]);
-			e_add.sh_main[1] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1]);
-			e_add.sh_main[2] = (reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2]);
+			float CO = 0.28209479177387814f;
+
+			float r = reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 0];
+			float g = reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 1];
+			float b = reinterpret_cast<float*>(f_dc->buffer.get())[idx * 3 + 2];
+
+			e_add.sh_main[0] = std::clamp<float>(0.5f + CO * r, 0.0f, 1.0f);
+			e_add.sh_main[1] = std::clamp<float>(0.5f + CO * g, 0.0f, 1.0f);
+			e_add.sh_main[2] = std::clamp<float>(0.5f + CO * b, 0.0f, 1.0f);
 
 			dump_file << "main_color:\n";
 			dump_file << "r=" << e_add.sh_main[0] << "\n";
@@ -273,6 +300,13 @@ public:
 					dump_file << "a=" << "\n";
 					dump_file << "b=" << "\n";
 					dump_file << "c=" << "\n";
+					e_add.sh_add[sh_idx] = (reinterpret_cast<float*>(f_rest->buffer.get())[idx * 45 + sh_idx]);
+				}
+			}
+			else
+			{
+				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+				{
 					e_add.sh_add[sh_idx] = 0.0f;
 				}
 			}

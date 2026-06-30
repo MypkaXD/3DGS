@@ -81,6 +81,10 @@ private:
 	std::vector<AABB> m_bvh;
 	BVHGPU m_bvh_gpu;
 
+
+	// debug info variables
+	std::size_t m_id_gaussian_selected = 0;
+
 public:
 
 	App()
@@ -257,6 +261,7 @@ public:
 		GLint aspect_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "aspect");
 		GLint Q_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "Q");
 		GLint light_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "light_pos");
+		GLint ellipsoid_count_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "ellipsoid_count");
 
 		bool is_draw_bvh = false;
 		bool is_draw_aabb = false;
@@ -301,7 +306,7 @@ public:
 			glm::mat4 projection = glm::perspective(glm::radians(m_camera.Zoom), (float)m_width / (float)m_height, 0.1f, 1000.0f); // projection matrix
 			glm::mat4 model = glm::mat4(1.0f); // model matrix
 
-			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			m_shader_compute_gaussian.use();
@@ -315,6 +320,7 @@ public:
 			glUniform1f(aspect_loc, aspect);
 			glUniform1f(Q_loc, Ellipsoid::Q);
 			glUniform3f(light_pos_loc, light_pos[0], light_pos[1], light_pos[2]);
+			glUniform1i(ellipsoid_count_loc, m_loader.get_gaussians_count());
 			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -372,6 +378,8 @@ public:
 
 			ImGui::End();
 
+			create_debug_window();
+
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 			glfwSwapBuffers(m_window);
@@ -385,6 +393,59 @@ public:
 
 
 		}
+	}
+
+	void create_debug_window()
+	{
+		ImGui::Begin("Debug Window");
+
+		ImGui::Text("Count of gaussians: %d", m_loader.get_gaussians_count());
+
+		ImGui::SliderInt("Selected gaussian ID", reinterpret_cast<int*>(&m_id_gaussian_selected), 0, static_cast<int>(m_loader.get_gaussians_count() - 1));
+
+		if (m_id_gaussian_selected >= m_loader.get_gaussians_count())
+			m_id_gaussian_selected = m_loader.get_gaussians_count() - 1;
+
+		auto& selected_gaussian = m_loader.get_gaussians_general()[m_id_gaussian_selected];
+
+		ImGui::Text("Scale: (%f, %f, %f)", selected_gaussian.sigma.x, selected_gaussian.sigma.y, selected_gaussian.sigma.y);
+		ImGui::Text("Mu: (%f, %f, %f)", selected_gaussian.mu.x, selected_gaussian.mu.y, selected_gaussian.mu.y);
+
+		ImGui::Text("Inverse Scale Matrix:");
+		glm::mat3 inv_scale_matrix = glm::mat3(
+			1.0f / (selected_gaussian.sigma.x), 0.0f, 0.0f,
+			0.0f, 1.0f / (selected_gaussian.sigma.y), 0.0f,
+			0.0f, 0.0f, 1.0f / (selected_gaussian.sigma.z)
+		);
+		ImGui::BeginTable("scale_matrix", 3, ImGuiTableFlags_Borders);
+		for (std::size_t idx_i = 0; idx_i < 3; ++idx_i)
+		{
+			ImGui::TableNextRow();
+			for (std::size_t idx_j = 0; idx_j < 3; ++idx_j)
+			{
+				ImGui::TableSetColumnIndex(idx_j);
+				ImGui::Text("%f", inv_scale_matrix[idx_i][idx_j]);
+			}
+		}
+		ImGui::EndTable();
+
+		ImGui::Text("Rotation Matrix:");
+		ImGui::BeginTable("rotation_matrix", 3, ImGuiTableFlags_Borders);
+		for (std::size_t idx_i = 0; idx_i < 3; ++idx_i)
+		{
+			ImGui::TableNextRow();
+			for (std::size_t idx_j = 0; idx_j < 3; ++idx_j)
+			{
+				ImGui::TableSetColumnIndex(idx_j);
+				ImGui::Text("%f", selected_gaussian.rotation[idx_i][idx_j]);
+			}
+		}
+		ImGui::EndTable();
+
+		ImGui::Text("Camera Position: (%f, %f, %f)", m_camera.Position.x, m_camera.Position.y, m_camera.Position.z);
+		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Front.x, m_camera.Front.y, m_camera.Front.z);
+
+		ImGui::End();
 	}
 
 
@@ -494,12 +555,14 @@ private:
 		// m_loader.create_line();
 
 		// m_loader.create_cube();
-		// m_loader.create_random_scene(200);
+		// m_loader.create_random_scene(1);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\tractor\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
-		m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\point_cloud.ply");
-		//m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_room.ply");
+		m_loader.create_scene_from_file("C:\\dev\\3dgs_docker\\my_output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\a3be6993-c\\point_cloud\\iteration_10000\\point_cloud.ply");
 
