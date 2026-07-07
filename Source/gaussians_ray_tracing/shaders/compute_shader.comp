@@ -56,23 +56,94 @@ uniform float aspect;
 uniform float Q;
 uniform vec3 light_pos;
 uniform int ellipsoid_count;
+uniform int bvh_index;
 
-float intersect_aabb(vec3 center, vec3 inv_dir, vec3 min_box, vec3 max_box)
+float intersect_aabb(vec3 center, vec3 dir, vec3 min_box, vec3 max_box)
 {
-    vec3 t_min = (min_box - center) * inv_dir;
-    vec3 t_max = (max_box - center) * inv_dir;
+    float tx1, tx2, ty1, ty2, tz1, tz2;
 
-    vec3 tmin_vec = min(t_min, t_max);
-    vec3 tmax_vec = max(t_min, t_max);
+    bool no_intersection = false;
 
-    float tmin = max(max(tmin_vec.x, tmin_vec.y), tmin_vec.z);
-    float tmax = min(min(tmax_vec.x, tmax_vec.y), tmax_vec.z);
+    float eps = 1e-6;
 
-    // Если нет пересечения или box позади луча
-    if (tmax < 0.0 || tmin > tmax) return -1.0;
-    
-    // Возвращаем точку входа (или 0 если луч начинается внутри)
-    return max(tmin, 0.0);
+    if (abs(dir.x) < eps)
+    {
+        if (center.x < min_box.x || center.x > max_box.x)
+        {
+            no_intersection = true;
+        }
+        else
+        {
+            tx1 = -1e20;
+            tx2 = 1e20;
+        }
+    }
+    else
+    {
+        tx1 = (min_box.x - center.x) / dir.x;
+        tx2 = (max_box.x - center.x) / dir.x;
+    }
+
+    if (abs(dir.y) < eps)
+    {
+        if (center.y < min_box.y || center.y > max_box.y)
+        {
+            no_intersection = true;
+        }
+        else
+        {
+            ty1 = -1e20;
+            ty2 = 1e20;
+        }
+    }
+    else
+    {
+        ty1 = (min_box.y - center.y) / dir.y;
+        ty2 = (max_box.y - center.y) / dir.y;
+    }
+
+    if (abs(dir.z) < eps)
+    {
+        if (center.z < min_box.z || center.z > max_box.z)
+        {
+            no_intersection = true;
+        }
+        else
+        {
+            tz1 = -1e20;
+            tz2 = 1e20;
+        }
+    }
+    else
+    {
+        tz1 = (min_box.z - center.z) / dir.z;
+        tz2 = (max_box.z - center.z) / dir.z;
+    }
+
+    if (no_intersection)
+    {
+        return -1.0;
+    }
+
+    float t_min_x = min(tx1, tx2);
+    float t_max_x = max(tx1, tx2);
+    float t_min_y = min(ty1, ty2);
+    float t_max_y = max(ty1, ty2);
+    float t_min_z = min(tz1, tz2);
+    float t_max_z = max(tz1, tz2);
+
+
+    float t_enter = max(t_min_x, max(t_min_y, t_min_z));
+    float t_exit = min(t_max_x, min(t_max_y, t_max_z));
+
+    if (t_exit < 0.0 || t_enter > t_exit)
+    {
+        return -1.0;
+    }
+    else
+    {
+        return max(t_enter, 0.0);
+    }
 }
 
 float intersect_ellipsoid(
@@ -114,12 +185,13 @@ float intersect_ellipsoid(
 
 struct HitInfo
 {
-    float t;
+    float t_1;
+    float t_2;
     uint prim_id;
     float response;
 };
 
-void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout float closest_hit)
+void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
 {
     vec3 inv_dir = 1.0 / direction;
     
@@ -135,10 +207,9 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
         vec3 bounds_min = vec3(node.bounds[0], node.bounds[2], node.bounds[4]);
         vec3 bounds_max = vec3(node.bounds[1], node.bounds[3], node.bounds[5]);
         
-        float t_hit = intersect_aabb(center, inv_dir, bounds_min, bounds_max);
+        float t_hit = intersect_aabb(center, direction, bounds_min, bounds_max);
         
-        // Пропускаем если нет пересечения или оно дальше уже найденного
-        if (t_hit < 0.0 || t_hit >= closest_hit)
+        if (t_hit < 0.0)
             continue;
 
         // Если это листовой узел
@@ -157,36 +228,60 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
                 vec3 mu = eg.mu.xyz;
                 vec3 sigma = eg.sigma.xyz;
 
-                float t = -1.0;
+                float t_in = -1.0;
+                float t_out = -1.0;
 
                 vec3 e_sphere = L * (center - mu);
                 vec3 d_sphere = L * direction;
-    
-                float d_dot_d = dot(d_sphere, d_sphere);
-                float o_dot_d = dot(e_sphere, d_sphere);
-
-                float t_ca = -o_dot_d / d_dot_d;
-
-                vec3 closest_point = e_sphere + t_ca * d_sphere;
-                float d2 = dot(closest_point, closest_point);
 
                 float Q2 = Q * Q;
 
-                if (d2 <= Q2) {
+                vec3 inv_d = 1.0f / d_sphere;
+                vec3 t0 = (-Q - e_sphere) * inv_d;
+                vec3 t1 = ( Q - e_sphere) * inv_d;
+
+                vec3 t_min_vec = min(t0, t1);
+                vec3 t_max_vec = max(t0, t1);
+
+                float t_min_aabb = max(max(t_min_vec.x, t_min_vec.y), t_min_vec.z);
+                float t_max_aabb = min(min(t_max_vec.x, t_max_vec.y), t_max_vec.z);
+
+                if (t_max_aabb < 0.0f || t_min_aabb > t_max_aabb)
+                {
+                    continue; // Нет пересечения с AABB сферы
+                }
+
+                float t_entry_aabb = max(t_min_aabb, 0.0f);
+
+                vec3 new_origin = e_sphere + t_entry_aabb * d_sphere;
+
+                float d_dot_d = dot(d_sphere, d_sphere);
+                float o_dot_d = dot(new_origin, d_sphere);
+
+                float t_ca = -o_dot_d / d_dot_d;
+
+                vec3 closest_point = new_origin + t_ca * d_sphere;
+                vec3 max_response_point = e_sphere - dot(e_sphere, d_sphere) / dot(d_sphere, d_sphere) * d_sphere;
+
+                float d2 = dot(closest_point, closest_point);
+
+                if (d2 <= Q2 + 1e-6f) {
 
                         float t_hc = sqrt(Q2 - d2) / sqrt(d_dot_d);
     
                         float t1 = t_ca - t_hc;
                         float t2 = t_ca + t_hc;
 
-                        t = (t1 >= 0.0) ? t1 : t2;
+                        t_in = (t1 >= 0.0) ? t1 : t2;
+                        t_out = (t2 >= 0.0) ? t2 : t1;
                 }
-                
-                if (t > 0.0)
+
+                if (t_in > 0.0)
                 {
-                    hit_info[hit_count].t = t;
+                    hit_info[hit_count].t_1 = t_in;
+                    hit_info[hit_count].t_2 = t_out;
                     hit_info[hit_count].prim_id = prim_id;
-                    hit_info[hit_count].response = exp(-0.5f * d2);
+                    hit_info[hit_count].response = exp(-0.5f * dot(max_response_point,max_response_point));
                     hit_count++;
                 }
             }
@@ -196,7 +291,7 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
             {
                 for (int j = 0; j < hit_count - i - 1; j++)
                 {
-                    if (hit_info[j].t > hit_info[j + 1].t)
+                    if (hit_info[j].t_1 > hit_info[j + 1].t_1)
                     {
                         HitInfo temp = hit_info[j];
                         hit_info[j] = hit_info[j + 1];
@@ -212,10 +307,15 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
                 
                 EllipsoidAddtitional ea = ellipsoid_addtitional[prim_id];
 
-                float alpha = clamp(ea.opacity * hit_info[i].response, 0.0, 1.0);
-                
-                pixel_color.rgb += vec3(ea.sh_main[0], ea.sh_main[1], ea.sh_main[2]) * alpha * pixel_color.a;
+                vec3 color = vec3(ea.sh_main[0], ea.sh_main[1], ea.sh_main[2]);
+
+                float alpha = clamp(ea.opacity * hit_info[i].response * (hit_info[i].t_2 - hit_info[i].t_1), 0.0, 1.0);
+    
+                pixel_color.rgb += color * alpha * pixel_color.a;
                 pixel_color.a *= (1.0 - alpha);
+
+                // pixel_color.rgb = vec3(1.0, 0.0, 0.0);
+                // pixel_color.a = 1.0;
             }
         }
         else // Внутренний узел
@@ -228,7 +328,7 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
                 BVH_Node left_node = nodes[node.index_left];
                 vec3 left_min = vec3(left_node.bounds[0], left_node.bounds[2], left_node.bounds[4]);
                 vec3 left_max = vec3(left_node.bounds[1], left_node.bounds[3], left_node.bounds[5]);
-                t_left = intersect_aabb(center, inv_dir, left_min, left_max);
+                t_left = intersect_aabb(center, direction, left_min, left_max);
             }
     
             if (node.index_right != -1)
@@ -236,25 +336,20 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
                 BVH_Node right_node = nodes[node.index_right];
                 vec3 right_min = vec3(right_node.bounds[0], right_node.bounds[2], right_node.bounds[4]);
                 vec3 right_max = vec3(right_node.bounds[1], right_node.bounds[3], right_node.bounds[5]);
-                t_right = intersect_aabb(center, inv_dir, right_min, right_max);
+                t_right = intersect_aabb(center, direction, right_min, right_max);
             }
-    
-            // Если оба пересекаются — сначала ближайший
-            // Если пересекает только один — только его и добавляем
-            // Порядок добавления в стек: дальний, потом ближайший (чтобы ближний обработался первым)
     
             if (t_left >= 0.0 && t_right >= 0.0)
             {
-                // Оба пересекаются — сначала дальний в стек, потом ближний
                 if (t_left < t_right)
                 {
-                    stack[stack_ptr++] = node.index_right;  // дальний
-                    stack[stack_ptr++] = node.index_left;   // ближний
+                    stack[stack_ptr++] = node.index_right;
+                    stack[stack_ptr++] = node.index_left;
                 }
                 else
                 {
-                    stack[stack_ptr++] = node.index_left;   // дальний
-                    stack[stack_ptr++] = node.index_right;  // ближний
+                    stack[stack_ptr++] = node.index_left;
+                    stack[stack_ptr++] = node.index_right;
                 }
             }
             else if (t_left >= 0.0)
@@ -265,7 +360,6 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color, inout flo
             {
                 stack[stack_ptr++] = node.index_right;
             }
-            // Если оба -1, не добавляем ничего
         }
     }
 }
@@ -288,9 +382,8 @@ void main()
     vec3 ray_dir = normalize(camera_front + camera_right * ray_ndc.x - camera_up * ray_ndc.y);
 
     vec4 pixel_color = vec4(0.0, 0.0, 0.0, 1.0);
-    float closest_hit = 1e30; // Большое число для начальной дистанции
 
-    traverse_bvh(camera_pos, ray_dir, pixel_color, closest_hit);
+    traverse_bvh(camera_pos, ray_dir, pixel_color);
 
     imageStore(out_tex, pos, pixel_color);
 }

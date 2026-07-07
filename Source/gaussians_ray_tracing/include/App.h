@@ -84,6 +84,9 @@ private:
 
 	// debug info variables
 	std::size_t m_id_gaussian_selected = 0;
+	int m_bvh_index = 0;
+	bool m_is_draw_only_aabb_in_bvh_node = false;
+	bool m_is_draw_only_selected_bvh_node = false;
 
 public:
 
@@ -262,6 +265,7 @@ public:
 		GLint Q_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "Q");
 		GLint light_pos_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "light_pos");
 		GLint ellipsoid_count_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "ellipsoid_count");
+		GLint bvh_index_loc = glGetUniformLocation(m_shader_compute_gaussian.get_id(), "bvh_index");
 
 		bool is_draw_bvh = false;
 		bool is_draw_aabb = false;
@@ -321,6 +325,7 @@ public:
 			glUniform1f(Q_loc, Ellipsoid::Q);
 			glUniform3f(light_pos_loc, light_pos[0], light_pos[1], light_pos[2]);
 			glUniform1i(ellipsoid_count_loc, m_loader.get_gaussians_count());
+			glUniform1i(bvh_index_loc, m_bvh_index);
 			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
@@ -355,6 +360,34 @@ public:
 				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, aabb.size(), m_bvh.size());
 			}
 
+			if (m_is_draw_only_aabb_in_bvh_node)
+			{
+				m_shader_bvh.use();
+				glBindVertexArray(m_VAO_BVH);
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 0.0f, 1.0f, 1.0f);
+
+				for (std::size_t idx = 0; idx < m_bvh_gpu.nodes[m_bvh_index].primitive_counts; ++idx)
+				{
+					unsigned int prim_id = m_bvh_gpu.prim_ids[m_bvh_gpu.nodes[m_bvh_index].primitive_index + idx];
+					unsigned int instance_id = m_bvh.size() + prim_id;
+					glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, 1, instance_id);
+				}
+			}
+
+			if (m_is_draw_only_selected_bvh_node)
+			{
+				m_shader_bvh.use();
+				glBindVertexArray(m_VAO_BVH);
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 1.0f, 0.0f, 1.0f);
+				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, 1, m_bvh_index);
+			}
+
 			m_shader_light_source.use();
 			glBindVertexArray(m_VAO_LIGHT_SOURCE);
 			glUniformMatrix4fv(glGetUniformLocation(m_shader_light_source.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
@@ -375,6 +408,8 @@ public:
 
 			ImGui::Checkbox("Draw BVH", &is_draw_bvh);
 			ImGui::Checkbox("Draw AABB", &is_draw_aabb);
+			ImGui::Checkbox("Draw only AABB in BVH node", &m_is_draw_only_aabb_in_bvh_node);
+			ImGui::Checkbox("Draw only selected BVH node", &m_is_draw_only_selected_bvh_node);
 
 			ImGui::End();
 
@@ -401,10 +436,13 @@ public:
 
 		ImGui::Text("Count of gaussians: %d", m_loader.get_gaussians_count());
 
-		ImGui::SliderInt("Selected gaussian ID", reinterpret_cast<int*>(&m_id_gaussian_selected), 0, static_cast<int>(m_loader.get_gaussians_count() - 1));
-
-		if (m_id_gaussian_selected >= m_loader.get_gaussians_count())
-			m_id_gaussian_selected = m_loader.get_gaussians_count() - 1;
+		if (ImGui::DragInt("Selected gaussian ID", reinterpret_cast<int*>(&m_id_gaussian_selected), 1, 0, static_cast<int>(m_loader.get_gaussians_count() - 1)))
+		{
+			if (m_id_gaussian_selected < 0)
+				m_id_gaussian_selected = 0;
+			if (m_id_gaussian_selected >= m_loader.get_gaussians_count())
+				m_id_gaussian_selected = m_loader.get_gaussians_count() - 1;
+		}
 
 		auto& selected_gaussian = m_loader.get_gaussians_general()[m_id_gaussian_selected];
 
@@ -444,6 +482,20 @@ public:
 
 		ImGui::Text("Camera Position: (%f, %f, %f)", m_camera.Position.x, m_camera.Position.y, m_camera.Position.z);
 		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Front.x, m_camera.Front.y, m_camera.Front.z);
+
+		if (ImGui::DragInt("Selected BVH index", &m_bvh_index, 1, 0, static_cast<int>(m_bvh.size() - 1)))
+		{
+			if (m_bvh_index < 0)
+				m_bvh_index = 0;
+			if (m_bvh_index >= m_bvh.size())
+				m_bvh_index = m_bvh.size() - 1;
+		}
+		ImGui::Text("BVH primitives count %d", m_bvh_gpu.nodes[m_bvh_index].primitive_counts);
+
+		for (std::size_t idx = 0; idx < m_bvh_gpu.nodes[m_bvh_index].primitive_counts; ++idx)
+		{
+			ImGui::Text("Primitive ID: %d", m_bvh_gpu.prim_ids[m_bvh_gpu.nodes[m_bvh_index].primitive_index + idx]);
+		}
 
 		ImGui::End();
 	}
@@ -555,14 +607,15 @@ private:
 		// m_loader.create_line();
 
 		// m_loader.create_cube();
-		// m_loader.create_random_scene(1);
+		// m_loader.create_random_scene(2);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\tractor\\point_cloud.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\point_cloud.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_part_of_chair.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_tracktor.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_room.ply");
-		m_loader.create_scene_from_file("C:\\dev\\3dgs_docker\\my_output\\point_cloud\\iteration_1000\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\3dgs_docker\\my_output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\gaussian-splatting\\output\\a3be6993-c\\point_cloud\\iteration_10000\\point_cloud.ply");
 

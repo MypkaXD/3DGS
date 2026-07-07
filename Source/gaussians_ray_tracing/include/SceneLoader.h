@@ -24,7 +24,7 @@ public:
 		std::random_device rd;
 		std::mt19937 gen(rd());
 
-		std::uniform_int_distribution<int> dis_mu(-100, 100);
+		std::uniform_int_distribution<int> dis_mu(-5, 5);
 		std::uniform_real_distribution<float> dis_sigma(1, 5);
 		std::normal_distribution<float> dis_normal(0.0f, 1.0f);
 		std::uniform_real_distribution<float> dis_uniform_0_to_1(0.0f, 1.0f);
@@ -40,13 +40,13 @@ public:
 			Ellipsoid::EllipsoidGeneral e_gen;
 			Ellipsoid::EllipsoidAddtitional e_add;
 
-			e_gen.mu[0] = 0.0f;
-			e_gen.mu[1] = 0.0f;
-			e_gen.mu[2] = 0.0f;
+			e_gen.mu[0] = dis_mu(gen);
+			e_gen.mu[1] = dis_mu(gen);
+			e_gen.mu[2] = dis_mu(gen);
 
-			e_gen.sigma[0] = 0.000001f;
-			e_gen.sigma[1] = 2.5f;
-			e_gen.sigma[2] = 2.5f;
+			e_gen.sigma[0] = dis_sigma(gen);
+			e_gen.sigma[1] = dis_sigma(gen);
+			e_gen.sigma[2] = dis_sigma(gen);
 
 			float x = dis_normal(gen);
 			float y = dis_normal(gen);
@@ -72,7 +72,7 @@ public:
 				0.0f, 0.0f, 0.0f, 1.0f
 			) * glm::transpose(e_gen.rotation);
 
-			std::cout << e_gen.covariance_invariant << std::endl;
+			// std::cout << e_gen.covariance_invariant << std::endl;
 
 			e_add.sh_main[0] = dis_uniform_0_to_1(gen);
 			e_add.sh_main[1] = dis_uniform_0_to_1(gen);
@@ -193,10 +193,10 @@ public:
 			e_gen.mu[2] = reinterpret_cast<float*>(xyz->buffer.get())[idx * 3 + 2];
 			e_gen.mu[3] = 1.0f;
 
-			dump_file << "pos\n";
-			dump_file << "pos_x=" << e_gen.mu[0] << "\n";
-			dump_file << "pos_y=" << e_gen.mu[1] << "\n";
-			dump_file << "pos_z=" << e_gen.mu[2] << "\n";
+			//dump_file << "pos\n";
+			//dump_file << "pos_x=" << e_gen.mu[0] << "\n";
+			//dump_file << "pos_y=" << e_gen.mu[1] << "\n";
+			//dump_file << "pos_z=" << e_gen.mu[2] << "\n";
 
 			e_gen.sigma[0] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 0]);
 			e_gen.sigma[1] = std::exp(reinterpret_cast<float*>(scales->buffer.get())[idx * 3 + 1]);
@@ -209,10 +209,10 @@ public:
 			//e_gen.sigma[2] = e_gen.sigma[2] < eps ? eps : e_gen.sigma[2];
 
 
-			dump_file << "scale:\n";
-			dump_file << "sx=" << e_gen.sigma[0] << "\n";
-			dump_file << "sy=" << e_gen.sigma[1] << "\n";
-			dump_file << "sz=" << e_gen.sigma[2] << "\n";
+			//dump_file << "scale:\n";
+			//dump_file << "sx=" << e_gen.sigma[0] << "\n";
+			//dump_file << "sy=" << e_gen.sigma[1] << "\n";
+			//dump_file << "sz=" << e_gen.sigma[2] << "\n";
 
 			/*std::cout << "Mu:" << std::endl;
 			std::cout << e_gen.mu[0] << std::endl;
@@ -233,34 +233,34 @@ public:
 			float y = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 2];
 			float z = reinterpret_cast<float*>(quat_rot->buffer.get())[idx * 4 + 3];
 
-			dump_file << "rotation:\n";
-			dump_file << "w=" << w << "\n";
-			dump_file << "x=" << x << "\n";
-			dump_file << "y=" << y << "\n";
-			dump_file << "z=" << z << "\n";
+			//dump_file << "rotation:\n";
+			//dump_file << "w=" << w << "\n";
+			//dump_file << "x=" << x << "\n";
+			//dump_file << "y=" << y << "\n";
+			//dump_file << "z=" << z << "\n";
 
 			glm::quat q = glm::normalize(glm::quat(w, x, y, z));
 			e_gen.rotation = glm::mat4_cast(q);
 
-			static bool test = true;
-			if (test)
-			{
-				std::cout << "Rotation matrix:" << std::endl;
-				for (int row = 0; row < 4; row++) {
-					for (int col = 0; col < 4; col++) {
-						std::cout << e_gen.rotation[row][col] << " ";
-					}
-					std::cout << std::endl;
-				}
-				for (int row = 0; row < 4; row++) {
-					for (int col = 0; col < 4; col++) {
-						std::cout << e_gen.rotation[col][row] << " ";
-					}
-					std::cout << std::endl;
-				}
-				std::cout << e_gen.rotation << std::endl;
-				test = false;
-			}
+			//static bool test = true;
+			//if (test)
+			//{
+			//	std::cout << "Rotation matrix:" << std::endl;
+			//	for (int row = 0; row < 4; row++) {
+			//		for (int col = 0; col < 4; col++) {
+			//			std::cout << e_gen.rotation[row][col] << " ";
+			//		}
+			//		std::cout << std::endl;
+			//	}
+			//	for (int row = 0; row < 4; row++) {
+			//		for (int col = 0; col < 4; col++) {
+			//			std::cout << e_gen.rotation[col][row] << " ";
+			//		}
+			//		std::cout << std::endl;
+			//	}
+			//	std::cout << e_gen.rotation << std::endl;
+			//	test = false;
+			//}
 
 			glm::mat4 scale_invatiant_squared = glm::mat4(
 				1.0f / (e_gen.sigma[0] * e_gen.sigma[0]), 0.0f, 0.0f, 0.0f,
@@ -287,19 +287,19 @@ public:
 			e_add.sh_main[1] = std::clamp<float>(0.5f + CO * g, 0.0f, 1.0f);
 			e_add.sh_main[2] = std::clamp<float>(0.5f + CO * b, 0.0f, 1.0f);
 
-			dump_file << "main_color:\n";
-			dump_file << "r=" << e_add.sh_main[0] << "\n";
-			dump_file << "g=" << e_add.sh_main[1] << "\n";
-			dump_file << "b=" << e_add.sh_main[2] << "\n";
+			//dump_file << "main_color:\n";
+			//dump_file << "r=" << e_add.sh_main[0] << "\n";
+			//dump_file << "g=" << e_add.sh_main[1] << "\n";
+			//dump_file << "b=" << e_add.sh_main[2] << "\n";
 
 			if (f_rest)
 			{
 				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 				{
-					dump_file << "add_color_" << sh_idx / 3 << ":\n";
-					dump_file << "a=" << "\n";
-					dump_file << "b=" << "\n";
-					dump_file << "c=" << "\n";
+					//dump_file << "add_color_" << sh_idx / 3 << ":\n";
+					//dump_file << "a=" << "\n";
+					//dump_file << "b=" << "\n";
+					//dump_file << "c=" << "\n";
 					e_add.sh_add[sh_idx] = (reinterpret_cast<float*>(f_rest->buffer.get())[idx * 45 + sh_idx]);
 				}
 			}
@@ -414,10 +414,10 @@ public:
 			{
 				for (std::size_t j = 0; j < n; ++j)
 				{
-					// ������ ����������
+
 					glm::vec3 coord;
 
-					// ��� ��������� ��� �������� �������� i � j
+
 					int free_axis1 = (face.fixed_axis + 1) % 3;
 					int free_axis2 = (face.fixed_axis + 2) % 3;
 
@@ -425,7 +425,7 @@ public:
 					coord[free_axis1] = cube_min[free_axis1] + step[free_axis1] * float(i);
 					coord[free_axis2] = cube_min[free_axis2] + step[free_axis2] * float(j);
 
-					// ������ ���������
+
 					Ellipsoid::EllipsoidGeneral e_gen;
 					Ellipsoid::EllipsoidAddtitional e_add;
 

@@ -413,97 +413,218 @@ struct App
 
         glm::vec3 direction = glm::normalize(dir - center);
 
+        std::cout << "Center: " << center << std::endl;
+        std::cout << "Direction point: " << dir << std::endl;
+        std::cout << "Direction vector: " << direction << std::endl;
+
         // intersection points in sphere space
 
-        glm::vec3 e_sphere = inv_scale * glm::transpose(rotation) * (center - mu);
-        glm::vec3 d_sphere = inv_scale * glm::transpose(rotation) * direction;
+        glm::vec3 e_sphere = (glm::transpose(rotation) * (center - mu)) / sigma;
+        glm::vec3 d_sphere = (glm::transpose(rotation) * direction) / sigma;
 
-        float d_dot_d = glm::dot(d_sphere, d_sphere);
-        float o_dot_d = glm::dot(e_sphere, d_sphere);
+        std::cout << "Sphere center point: " << e_sphere << std::endl;
+        std::cout << "Sphere direction vector: " << d_sphere << std::endl;
 
-        float t_ca = -o_dot_d / d_dot_d;
+        float Q = r;
+        float Q2 = Q * Q;
 
-        glm::vec3 closest_point = e_sphere + t_ca * d_sphere;
-        float d2 = glm::dot(closest_point, closest_point);
+        // ===== Шаг 1: Пересечение с AABB сферы в пространстве сферы =====
+        glm::vec3 inv_d = 1.0f / d_sphere;
+        glm::vec3 t0 = (-Q - e_sphere) * inv_d;
+        glm::vec3 t1 = ( Q - e_sphere) * inv_d;
 
-        float Q2 = r * r;
+        glm::vec3 t_min_vec = (glm::min)(t0, t1);
+        glm::vec3 t_max_vec = (glm::max)(t0, t1);
 
-        if (d2 <= Q2) {
+        float t_min_aabb = (glm::max)((glm::max)(t_min_vec.x, t_min_vec.y), t_min_vec.z);
+        float t_max_aabb = (glm::min)((glm::min)(t_max_vec.x, t_max_vec.y), t_max_vec.z);
 
-            float t_hc = glm::sqrt(Q2 - d2) / glm::sqrt(d_dot_d);
-    
-            float t1 = t_ca - t_hc;
-            float t2 = t_ca + t_hc;
+        std::cout << "AABB t_min: " << t_min_aabb << std::endl;
+        std::cout << "AABB t_max: " << t_max_aabb << std::endl;
 
-            glm::vec3 sphere_inter_1 = e_sphere + t1 * d_sphere;
-            glm::vec3 sphere_inter_2 = e_sphere + t2 * d_sphere;
-                    
-            file << "points: intersection_points_with_sphere" << std::endl;
-
-            dump3(file, sphere_inter_1.x + 10.0f, sphere_inter_1.y + 10.0f, sphere_inter_1.z + 10.0f);
+        if (t_max_aabb < 0.0f || t_min_aabb > t_max_aabb)
+        {
+            std::cout << "No intersection with AABB" << std::endl;
+            // Нет пересечения даже с AABB
+        }
+        else
+        {
+            float t_entry_aabb = (glm::max)(t_min_aabb, 0.0f);
+            
+            // ===== Шаг 2: Сдвигаем начало луча в точку входа в AABB =====
+            glm::vec3 new_origin = e_sphere + t_entry_aabb * d_sphere;
+            
+            std::cout << "New origin (after shift to AABB entry): " << new_origin << std::endl;
+            
+            // ===== Шаг 3: Стабильное пересечение со сферой =====
+            float d_dot_d = glm::dot(d_sphere, d_sphere);
+            float o_dot_d = glm::dot(new_origin, d_sphere);
+            
+            std::cout << "d_dot_d: " << d_dot_d << std::endl;
+            std::cout << "o_dot_d: " << o_dot_d << std::endl;
+            
+            float t_ca = -o_dot_d / d_dot_d;
+            
+            std::cout << "t_ca: " << t_ca << std::endl;
+            std::cout << "old_t_ca: " << -(glm::dot(e_sphere, d_sphere))/(glm::dot(d_sphere, d_sphere)) << std::endl; 
+            std::cout << "max_response: " << glm::dot(mu-center, rotation * inv_scale * inv_scale * glm::transpose(rotation) * direction) / glm::dot(direction,  rotation * inv_scale * inv_scale * glm::transpose(rotation) * direction) << std::endl;
+            
+            glm::vec3 closest_point = new_origin + t_ca * d_sphere;
+            std::cout << "closest_point: " << closest_point << std::endl;
+            
+            file << "points: max_response_point" << std::endl;
+                
+            dump3(file, closest_point.x + 10.0f, closest_point.y + 10.0f, closest_point.z + 10.0f);
             file << 10;
-            dump3(file, 1.0f, 0.0f, 1.0f);
-            file << "\n";
-
-            dump3(file, sphere_inter_2.x + 10.0f, sphere_inter_2.y + 10.0f, sphere_inter_2.z + 10.0f);
-            file << 10;
-            dump3(file, 1.0f, 0.0f, 1.0f);
+            dump3(file, 0.4f, 0.3f, 1.9f);
             file << "\n";
             
-            glm::vec3 ellipsoid_inter_1 = center + t1 * direction;
-            glm::vec3 ellipsoid_inter_2 = center + t2 * direction;
+            float d2 = glm::dot(closest_point, closest_point);
+            
+            std::cout << "d2: " << d2 << std::endl;
+            std::cout << "Q2: " << Q2 << std::endl;
+            
+            if (d2 <= Q2 + 1e-6f)  // небольшой запас на погрешность
+            {
+                std::cout << "point exist!!!" << std::endl;
+                
+                float t_hc = glm::sqrt(Q2 - d2) / glm::sqrt(d_dot_d);
+                
+                float t1 = t_ca - t_hc;
+                float t2 = t_ca + t_hc;
+                
+                // Итоговые t относительно изначального луча
+                float t_final_1 = t_entry_aabb + t1;
+                float t_final_2 = t_entry_aabb + t2;
+                
+                std::cout << "t_final_1: " << t_final_1 << std::endl;
+                std::cout << "t_final_2: " << t_final_2 << std::endl;
+                
+                glm::vec3 sphere_inter_1 = e_sphere + t_final_1 * d_sphere;
+                glm::vec3 sphere_inter_2 = e_sphere + t_final_2 * d_sphere;
                         
-            file << "points: intersection_points_with_ellipsoid" << std::endl;
-    
-            dump3(file, ellipsoid_inter_1.x, ellipsoid_inter_1.y, ellipsoid_inter_1.z);
-            file << 10;
-            dump3(file, 1.0f, 0.0f, 1.0f);
-            file << "\n";
-            
-            dump3(file, ellipsoid_inter_2.x, ellipsoid_inter_2.y, ellipsoid_inter_2.z);
-            file << 10;
-            dump3(file, 1.0f, 0.0f, 1.0f);
-            file << "\n";
+                file << "points: intersection_points_with_sphere" << std::endl;
+                
+                dump3(file, sphere_inter_1.x + 10.0f, sphere_inter_1.y + 10.0f, sphere_inter_1.z + 10.0f);
+                file << 10;
+                dump3(file, 1.0f, 0.0f, 1.0f);
+                file << "\n";
+                
+                dump3(file, sphere_inter_2.x + 10.0f, sphere_inter_2.y + 10.0f, sphere_inter_2.z + 10.0f);
+                file << 10;
+                dump3(file, 1.0f, 0.0f, 1.0f);
+                file << "\n";
+                
+                glm::vec3 ellipsoid_inter_1 = center + t_final_1 * direction;
+                glm::vec3 ellipsoid_inter_2 = center + t_final_2 * direction;
+                            
+                file << "points: intersection_points_with_ellipsoid" << std::endl;
+                
+                dump3(file, ellipsoid_inter_1.x, ellipsoid_inter_1.y, ellipsoid_inter_1.z);
+                file << 10;
+                dump3(file, 1.0f, 0.0f, 1.0f);
+                file << "\n";
+                
+                dump3(file, ellipsoid_inter_2.x, ellipsoid_inter_2.y, ellipsoid_inter_2.z);
+                file << 10;
+                dump3(file, 1.0f, 0.0f, 1.0f);
+                file << "\n";
+            }
+            else
+            {
+                std::cout << "No intersection with sphere (d2 > Q2)" << std::endl;
+                std::cout << "Closest distance: " << glm::sqrt(d2) << " > " << Q << std::endl;
+            }
         }
 
 
+        float tx1, tx2, ty1, ty2, tz1, tz2;
+        bool no_intersection = false;
 
-        float tx1 = (min_box.x - center.x) / direction.x;
-        float tx2 = (max_box.x - center.x) / direction.x;
-        
-        float ty1 = (min_box.y - center.y) / direction.y;
-        float ty2 = (max_box.y - center.y) / direction.y;
-        
-        float tz1 = (min_box.z - center.z) / direction.z;
-        float tz2 = (max_box.z - center.z) / direction.z;
+        // Ось X
+        if (std::abs(direction.x) < 1e-12) {
+            // Луч параллелен оси X
+            if (center.x < min_box.x || center.x > max_box.x) {
+                no_intersection = true;  // Луч проходит мимо
+            } else {
+                tx1 = -INFINITY;  // Игнорируем ось X
+                tx2 = INFINITY;
+            }
+        } else {
+            tx1 = (min_box.x - center.x) / direction.x;
+            tx2 = (max_box.x - center.x) / direction.x;
+        }
+
+        // Ось Y
+        if (!no_intersection) {
+            if (std::abs(direction.y) < 1e-12) {
+                if (center.y < min_box.y || center.y > max_box.y) {
+                    no_intersection = true;
+                } else {
+                    ty1 = -INFINITY;
+                    ty2 = INFINITY;
+                }
+            } else {
+                ty1 = (min_box.y - center.y) / direction.y;
+                ty2 = (max_box.y - center.y) / direction.y;
+            }
+        }
+
+        // Ось Z
+        if (!no_intersection) {
+            if (std::abs(direction.z) < 1e-12) {
+                if (center.z < min_box.z || center.z > max_box.z) {
+                    no_intersection = true;
+                } else {
+                    tz1 = -INFINITY;
+                    tz2 = INFINITY;
+                }
+            } else {
+                tz1 = (min_box.z - center.z) / direction.z;
+                tz2 = (max_box.z - center.z) / direction.z;
+            }
+        }
+
+        // Если нет пересечения по одной из осей
+        if (no_intersection) {
+            return;  // Выходим из функции
+        }
 
         float t_min_x = min(tx1, tx2);
         float t_max_x = max(tx1, tx2);
-        
         float t_min_y = min(ty1, ty2);
         float t_max_y = max(ty1, ty2);
-        
         float t_min_z = min(tz1, tz2);
         float t_max_z = max(tz1, tz2);
 
-        float t_enter = max(t_min_x, t_min_y, t_min_z);
-        float t_exit  = min(t_max_x, t_max_y, t_max_z);
-        
-        glm::vec3 intersection_aabb_1 = center + t_enter * direction;
-        glm::vec3 intersection_aabb_2 = center + t_exit * direction;
-        
-        file << "points: intersection_points_with_aabb" << std::endl;
-        
-        dump3(file, intersection_aabb_1.x, intersection_aabb_1.y, intersection_aabb_1.z);
-        file << 10;
-        dump3(file, 0.0f, 1.0f, 1.0f);
-        file << "\n";
-        
-        dump3(file, intersection_aabb_2.x, intersection_aabb_2.y, intersection_aabb_2.z);
-        file << 10;
-        dump3(file, 0.0f, 1.0f, 1.0f);
-        file << "\n";
+        float t_enter = max(t_min_x, max(t_min_y, t_min_z));
+        float t_exit = min(t_max_x, min(t_max_y, t_max_z));
 
+        // Проверка на валидность
+        if (std::isfinite(t_enter) && std::isfinite(t_exit)) {
+            if (t_enter <= t_exit && t_exit >= 0) {
+                float t1 = (std::max)(t_enter, 0.0f);
+                float t2 = t_exit;
+                
+                glm::vec3 intersection_aabb_1 = center + t1 * direction;
+                glm::vec3 intersection_aabb_2 = center + t2 * direction;
+                
+                file << "points: intersection_points_with_aabb" << std::endl;
+                
+                dump3(file, intersection_aabb_1.x, intersection_aabb_1.y, intersection_aabb_1.z);
+                file << 10;
+                dump3(file, 0.0f, 1.0f, 1.0f);
+                file << "\n";
+                
+                // Вторая точка тоже должна рисоваться, если t1 != t2
+                if (t1 != t2) {
+                    dump3(file, intersection_aabb_2.x, intersection_aabb_2.y, intersection_aabb_2.z);
+                    file << 10;
+                    dump3(file, 0.0f, 1.0f, 1.0f);
+                    file << "\n";
+                }
+            }
+        }
 
         // dump sphere
         file << "lines: sphere_lines" << std::endl;
@@ -612,7 +733,7 @@ private:
     std::vector<float> thetas;
 
     glm::vec3 mu = glm::vec3(0.0f, 0.0f, 0.0f);
-    glm::vec3 sigma = glm::vec3(0.00001f, 1.0f, 1.0f);
+    glm::vec3 sigma = glm::vec3(0.000001f, 20.5f, 20.5f);
     glm::vec4 quaternion = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
 
     float r = 1.0f;
