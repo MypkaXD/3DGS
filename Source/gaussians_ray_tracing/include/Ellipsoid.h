@@ -5,17 +5,22 @@
 
 namespace Ellipsoid
 {
-	float Q = 7.81f;
+	float Q = std::sqrt(7.81f);
 
-	struct EllipsoidGeneral
+	struct EllipsoidCPU
 	{
-		glm::vec4 mu;
-		glm::vec4 sigma;
+		glm::vec3 mu;
+		glm::vec3 sigma;
 		glm::mat4 rotation;
-		glm::mat4 covariance_invariant;
 	};
 
-	struct EllipsoidAddtitional
+	struct EllipsoidGPU
+	{
+		glm::vec4 mu;
+		glm::mat4 L;
+	};
+
+	struct EllipsoidAdditional
 	{
 		float sh_main[3];
 		float sh_add[45];

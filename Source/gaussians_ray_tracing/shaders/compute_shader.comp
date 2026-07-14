@@ -3,15 +3,13 @@
 layout (local_size_x = 8, local_size_y = 4, local_size_z = 1) in;
 layout(rgba32f, binding = 0) uniform image2D out_tex;
 
-struct EllipsoidGeneral
+struct EllipsoidGPU
 {
     vec4 mu;
-    vec4 sigma;
-    mat4 rotation;
-    mat4 covariance_invariant;
+    mat4 L;
 };
 
-struct EllipsoidAddtitional
+struct EllipsoidAdditional
 {
     float sh_main[3];
     float sh_add[45];
@@ -27,14 +25,14 @@ struct BVH_Node
     int primitive_index;
 };
 
-layout(std430, binding = 1) buffer EllipsoidsGeneral
+layout(std430, binding = 1) buffer EllipsoidsGPU
 {
-    EllipsoidGeneral ellipsoid_general[];
+    EllipsoidGPU ellipsoid_general[];
 };
 
-layout(std430, binding = 2) buffer EllipsoidsAddtitional
+layout(std430, binding = 2) buffer EllipsoidsAdditional
 {
-    EllipsoidAddtitional ellipsoid_addtitional[];
+    EllipsoidAdditional ellipsoid_additional[];
 };
 
 layout(std430, binding = 3) buffer BVH_Nodes
@@ -146,47 +144,9 @@ float intersect_aabb(vec3 center, vec3 dir, vec3 min_box, vec3 max_box)
     }
 }
 
-float intersect_ellipsoid(
-    mat3 L,
-    vec3 sigma,
-    vec3 mu,
-    vec3 center,
-    vec3 direction,  // должен быть нормализован!
-    float scale
-) { 
-    // Преобразуем в пространство сферы
-    vec3 e_sphere = L * (center - mu);
-    vec3 d_sphere = L * direction;
-    
-    float d_dot_d = dot(d_sphere, d_sphere);
-    float o_dot_d = dot(e_sphere, d_sphere);
-
-    float t_ca = -o_dot_d / d_dot_d;
-
-    vec3 closest_point = e_sphere + t_ca * d_sphere;
-    float d2 = dot(closest_point, closest_point);
-
-    float Q2 = scale * scale;
-
-    if (d2 <= Q2) {
-
-            float t_hc = sqrt(Q2 - d2) / sqrt(d_dot_d);
-    
-            float t1 = t_ca - t_hc;
-            float t2 = t_ca + t_hc;
-
-            return (t1 >= 0.0) ? t1 : t2; // Возвращаем ближайшее положительное пересечение
-    }
-    else
-    {
-        return -1.0; // Нет пересечения
-    }
-}
-
 struct HitInfo
 {
-    float t_1;
-    float t_2;
+    float t;
     uint prim_id;
     float response;
 };
@@ -198,6 +158,9 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
     int stack[64];
     int stack_ptr = 0;
     stack[stack_ptr++] = 0;
+
+    HitInfo hit_info[256];
+    int hit_count = 0;
 
     while (stack_ptr > 0)
     {
@@ -212,24 +175,18 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
         if (t_hit < 0.0)
             continue;
 
-        // Если это листовой узел
         if (node.primitive_counts > 0)
         {
-            HitInfo hit_info[8];
-            int hit_count = 0;
-
             for (int i = 0; i < node.primitive_counts; i++)
             {
                 uint prim_id = prim_ids[node.primitive_index + i];
                 
-                EllipsoidGeneral eg = ellipsoid_general[prim_id];
-                
-                mat3 L = mat3(eg.covariance_invariant);
-                vec3 mu = eg.mu.xyz;
-                vec3 sigma = eg.sigma.xyz;
+                EllipsoidGPU eg = ellipsoid_general[prim_id];
 
-                float t_in = -1.0;
-                float t_out = -1.0;
+                vec3 mu = vec3(eg.mu);
+                mat3 L = mat3(eg.L);
+
+                float t = -1.0;
 
                 vec3 e_sphere = L * (center - mu);
                 vec3 d_sphere = L * direction;
@@ -261,7 +218,6 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
                 float t_ca = -o_dot_d / d_dot_d;
 
                 vec3 closest_point = new_origin + t_ca * d_sphere;
-                vec3 max_response_point = e_sphere - dot(e_sphere, d_sphere) / dot(d_sphere, d_sphere) * d_sphere;
 
                 float d2 = dot(closest_point, closest_point);
 
@@ -272,53 +228,22 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
                         float t1 = t_ca - t_hc;
                         float t2 = t_ca + t_hc;
 
-                        t_in = (t1 >= 0.0) ? t1 : t2;
-                        t_out = (t2 >= 0.0) ? t2 : t1;
+                        t = (t1 >= 0.0) ? t1 : t2;
+                        t += t_entry_aabb;
                 }
-
-                if (t_in > 0.0)
+                
+                if (t > 0.0)
                 {
-                    hit_info[hit_count].t_1 = t_in;
-                    hit_info[hit_count].t_2 = t_out;
+                    vec3 max_response_point = e_sphere - dot(e_sphere, d_sphere) / dot(d_sphere, d_sphere) * d_sphere;
+
+                    hit_info[hit_count].t = t;
                     hit_info[hit_count].prim_id = prim_id;
                     hit_info[hit_count].response = exp(-0.5f * dot(max_response_point,max_response_point));
                     hit_count++;
                 }
             }
-
-            // Сортируем пересечения по расстоянию
-            for (int i = 0; i < hit_count - 1; i++)
-            {
-                for (int j = 0; j < hit_count - i - 1; j++)
-                {
-                    if (hit_info[j].t_1 > hit_info[j + 1].t_1)
-                    {
-                        HitInfo temp = hit_info[j];
-                        hit_info[j] = hit_info[j + 1];
-                        hit_info[j + 1] = temp;
-                    }
-                }
-            }
-
-            // Обрабатываем пересечения в порядке возрастания расстояния
-            for (int i = 0; i < hit_count; i++)
-            {
-                uint prim_id = hit_info[i].prim_id;
-                
-                EllipsoidAddtitional ea = ellipsoid_addtitional[prim_id];
-
-                vec3 color = vec3(ea.sh_main[0], ea.sh_main[1], ea.sh_main[2]);
-
-                float alpha = clamp(ea.opacity * hit_info[i].response * (hit_info[i].t_2 - hit_info[i].t_1), 0.0, 1.0);
-    
-                pixel_color.rgb += color * alpha * pixel_color.a;
-                pixel_color.a *= (1.0 - alpha);
-
-                // pixel_color.rgb = vec3(1.0, 0.0, 0.0);
-                // pixel_color.a = 1.0;
-            }
         }
-        else // Внутренний узел
+        else
         {
             float t_left = -1.0;
             float t_right = -1.0;
@@ -361,6 +286,33 @@ void traverse_bvh(vec3 center, vec3 direction, inout vec4 pixel_color)
                 stack[stack_ptr++] = node.index_right;
             }
         }
+    }
+
+    for (int i = 0; i < hit_count - 1; i++)
+    {
+        for (int j = 0; j < hit_count - i - 1; j++)
+        {
+            if (hit_info[j].t > hit_info[j + 1].t)
+            {
+                HitInfo temp = hit_info[j];
+                hit_info[j] = hit_info[j + 1];
+                hit_info[j + 1] = temp;
+            }
+        }
+    }
+    
+    for (int i = 0; i < hit_count; i++)
+    {
+        uint prim_id = hit_info[i].prim_id;
+
+        EllipsoidAdditional ea = ellipsoid_additional[prim_id];
+
+        vec3 color = vec3(ea.sh_main[0], ea.sh_main[1], ea.sh_main[2]);
+    
+        float alpha = clamp(ea.opacity * hit_info[i].response, 0.0, 1.0);
+    
+        pixel_color.rgb += color * alpha * pixel_color.a;
+        pixel_color.a *= (1.0 - alpha);
     }
 }
 

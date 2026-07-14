@@ -22,6 +22,7 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/io.hpp> 
+#include <glm/gtx/matrix_operation.hpp>
 
 #include <UV.h>
 #include <SceneLoader.h>
@@ -141,7 +142,7 @@ public:
 		init_gaussians();
 
 		std::vector<AABB> aabb;
-		generate_AABB_from_gaussians(m_loader.get_gaussians_general(), aabb);
+		generate_AABB_from_gaussians(m_loader.get_gaussians_general(), m_loader.get_gaussians_additional(), aabb);
 
 		create_bvh(aabb, m_bvh, m_bvh_gpu);
 
@@ -198,14 +199,28 @@ public:
 		glGenVertexArrays(1, &m_VAO_gaussians);
 		glBindVertexArray(m_VAO_gaussians);
 
+		std::vector<Ellipsoid::EllipsoidGPU> gaussians_gpu;
+		auto& gaussians_general = m_loader.get_gaussians_general();
+		for (std::size_t idx = 0; idx < gaussians_general.size(); ++idx)
+		{
+			Ellipsoid::EllipsoidGPU e_gpu;
+			
+			e_gpu.mu = glm::vec4(gaussians_general[idx].mu, 1.0f);
+
+			glm::mat4 inv_scale = glm::diagonal4x4(glm::vec4(1.0f / gaussians_general[idx].sigma[0], 1.0f / gaussians_general[idx].sigma[1], 1.0f / gaussians_general[idx].sigma[2], 1.0f));
+
+			e_gpu.L = glm::mat4(inv_scale * glm::transpose(gaussians_general[idx].rotation));
+			gaussians_gpu.emplace_back(e_gpu);
+		}
+
 		glGenBuffers(1, &m_SSBO_gaussians_general);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_general);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_general().size() * sizeof(Ellipsoid::EllipsoidGeneral), m_loader.get_gaussians_general().data(), GL_STATIC_DRAW);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, gaussians_gpu.size() * sizeof(Ellipsoid::EllipsoidGPU), gaussians_gpu.data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_SSBO_gaussians_general);
 
 		glGenBuffers(1, &m_SSBO_gaussians_additional);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_SSBO_gaussians_additional);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_additional().size() * sizeof(Ellipsoid::EllipsoidAddtitional), m_loader.get_gaussians_additional().data(), GL_STATIC_DRAW);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, m_loader.get_gaussians_additional().size() * sizeof(Ellipsoid::EllipsoidAdditional), m_loader.get_gaussians_additional().data(), GL_STATIC_DRAW);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_SSBO_gaussians_additional);
 
 		glGenBuffers(1, &m_SSBO_bvh_nodes);
@@ -225,7 +240,7 @@ public:
 
 
 		std::vector<AABB> aabb;
-		generate_AABB_from_gaussians(m_loader.get_gaussians_general(), aabb);
+		generate_AABB_from_gaussians(m_loader.get_gaussians_general(), m_loader.get_gaussians_additional(), aabb);
 
 		glGenBuffers(1, &m_VBO_BVH);
 		glBindBuffer(GL_ARRAY_BUFFER, m_VBO_BVH);
@@ -444,42 +459,6 @@ public:
 				m_id_gaussian_selected = m_loader.get_gaussians_count() - 1;
 		}
 
-		auto& selected_gaussian = m_loader.get_gaussians_general()[m_id_gaussian_selected];
-
-		ImGui::Text("Scale: (%f, %f, %f)", selected_gaussian.sigma.x, selected_gaussian.sigma.y, selected_gaussian.sigma.y);
-		ImGui::Text("Mu: (%f, %f, %f)", selected_gaussian.mu.x, selected_gaussian.mu.y, selected_gaussian.mu.y);
-
-		ImGui::Text("Inverse Scale Matrix:");
-		glm::mat3 inv_scale_matrix = glm::mat3(
-			1.0f / (selected_gaussian.sigma.x), 0.0f, 0.0f,
-			0.0f, 1.0f / (selected_gaussian.sigma.y), 0.0f,
-			0.0f, 0.0f, 1.0f / (selected_gaussian.sigma.z)
-		);
-		ImGui::BeginTable("scale_matrix", 3, ImGuiTableFlags_Borders);
-		for (std::size_t idx_i = 0; idx_i < 3; ++idx_i)
-		{
-			ImGui::TableNextRow();
-			for (std::size_t idx_j = 0; idx_j < 3; ++idx_j)
-			{
-				ImGui::TableSetColumnIndex(idx_j);
-				ImGui::Text("%f", inv_scale_matrix[idx_i][idx_j]);
-			}
-		}
-		ImGui::EndTable();
-
-		ImGui::Text("Rotation Matrix:");
-		ImGui::BeginTable("rotation_matrix", 3, ImGuiTableFlags_Borders);
-		for (std::size_t idx_i = 0; idx_i < 3; ++idx_i)
-		{
-			ImGui::TableNextRow();
-			for (std::size_t idx_j = 0; idx_j < 3; ++idx_j)
-			{
-				ImGui::TableSetColumnIndex(idx_j);
-				ImGui::Text("%f", selected_gaussian.rotation[idx_i][idx_j]);
-			}
-		}
-		ImGui::EndTable();
-
 		ImGui::Text("Camera Position: (%f, %f, %f)", m_camera.Position.x, m_camera.Position.y, m_camera.Position.z);
 		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Front.x, m_camera.Front.y, m_camera.Front.z);
 
@@ -607,13 +586,13 @@ private:
 		// m_loader.create_line();
 
 		// m_loader.create_cube();
-		// m_loader.create_random_scene(2);
+		// m_loader.create_random_scene(1000);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\tractor\\point_cloud.ply");
-		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_part_of_chair.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_tracktor.ply");
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_tracktor.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_room.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\3dgs_docker\\my_output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory

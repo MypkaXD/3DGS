@@ -16,11 +16,11 @@ struct AABB
 		: center(center), extent(extent) {
 	}
 
-    AABB(const Ellipsoid::EllipsoidGeneral& ellipsoid, const float Q)
+    AABB(const Ellipsoid::EllipsoidCPU& ellipsoid, const float Q)
     {
-        auto r_1 = (glm::transpose(ellipsoid.rotation))[0];
-        auto r_2 = (glm::transpose(ellipsoid.rotation))[1];
-        auto r_3 = (glm::transpose(ellipsoid.rotation))[2];
+        auto r_1 = glm::vec3((glm::transpose(ellipsoid.rotation))[0]);
+        auto r_2 = glm::vec3((glm::transpose(ellipsoid.rotation))[1]);
+        auto r_3 = glm::vec3((glm::transpose(ellipsoid.rotation))[2]);
 
         glm::vec3 min = glm::vec3(
             ellipsoid.mu[0] - float(Ellipsoid::Q * std::sqrt((glm::dot(r_1 * r_1, ellipsoid.sigma * ellipsoid.sigma)))),
@@ -59,14 +59,14 @@ unsigned int AABB::cube_indices[24] = {
     0,4, 1,5, 2,6, 3,7
 };
 
-void generate_AABB_from_gaussians(const std::vector<Ellipsoid::EllipsoidGeneral>& gaussians, std::vector<AABB>& aabb)
+void generate_AABB_from_gaussians(const std::vector<Ellipsoid::EllipsoidCPU>& gaussians, const std::vector<Ellipsoid::EllipsoidAdditional>& gaussians_additional, std::vector<AABB>& aabb)
 {
     aabb.clear();
     aabb.reserve(gaussians.size());
 
     for (std::size_t idx = 0; idx < gaussians.size(); ++idx)
     {
-        aabb.emplace_back(gaussians[idx], Ellipsoid::Q);
+        aabb.emplace_back(gaussians[idx], Ellipsoid::Q * gaussians_additional[idx].opacity);
     }
 }
 
