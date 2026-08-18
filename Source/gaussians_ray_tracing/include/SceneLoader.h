@@ -59,10 +59,10 @@ public:
 			e_add.sh_main[1] = dis_float(gen);
 			e_add.sh_main[2] = dis_float(gen);
 
-			for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
+			/*for (std::size_t idx_sh = 0; idx_sh < 45; ++idx_sh)
 			{
 				e_add.sh_add[idx_sh] = dis_float(gen);
-			}
+			}*/
 
 			e_add.opacity = dis_float(gen);
 
@@ -197,20 +197,20 @@ public:
 			e_add.sh_main[1] = std::clamp<float>(0.5f + CO * g, 0.0f, 1.0f);
 			e_add.sh_main[2] = std::clamp<float>(0.5f + CO * b, 0.0f, 1.0f);
 
-			if (f_rest)
-			{
-				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
-				{
-					e_add.sh_add[sh_idx] = (reinterpret_cast<float*>(f_rest->buffer.get())[idx * 45 + sh_idx]);
-				}
-			}
-			else
-			{
-				for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
-				{
-					e_add.sh_add[sh_idx] = 0.0f;
-				}
-			}
+			//if (f_rest)
+			//{
+			//	for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+			//	{
+			//		e_add.sh_add[sh_idx] = (reinterpret_cast<float*>(f_rest->buffer.get())[idx * 45 + sh_idx]);
+			//	}
+			//}
+			//else
+			//{
+			//	/*for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+			//	{
+			//		e_add.sh_add[sh_idx] = 0.0f;
+			//	}*/
+			//}
 
 			float opacity_value = reinterpret_cast<float*>(opacity->buffer.get())[idx];
 			opacity_value = (1.0 / (1.0 + std::exp(-opacity_value)));
@@ -278,10 +278,10 @@ public:
 					e_add.sh_main[1] = dis_float(gen);
 					e_add.sh_main[2] = dis_float(gen);
 
-					for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+					/*for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 					{
 						e_add.sh_add[sh_idx] = 0.0f;
-					}
+					}*/
 
 					e_add.opacity = 1.0f;
 
@@ -320,10 +320,10 @@ public:
 					e_add.sh_main[1] = dis_float(gen);
 					e_add.sh_main[2] = dis_float(gen);
 
-					for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+					/*for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 					{
 						e_add.sh_add[sh_idx] = 0.0f;
-					}
+					}*/
 
 					e_add.opacity = 1.0f;
 
@@ -376,10 +376,10 @@ public:
 				e_add.sh_main[2] = 1.78f;
 			}
 
-			for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
+			/*for (std::size_t sh_idx = 0; sh_idx < 45; ++sh_idx)
 			{
 				e_add.sh_add[sh_idx] = 0.0f;
-			}
+			}*/
 
 			e_add.opacity = 1.0f;
 

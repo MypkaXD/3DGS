@@ -41,6 +41,13 @@ public:
         WorldUp = up;
         Yaw = yaw;
         Pitch = pitch;
+
+        Position = glm::vec3(2.08f, 2.18f, -1.65f);
+        Front = glm::vec3(-0.5f, -0.14f, 0.86f);
+        Up = glm::vec3(-0.1f, 0.992f, 0.11f);
+        Right = glm::vec3(-0.88f, 0.0f, -0.47f);
+        WorldUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
         update_camera_vectors();
 	}
 

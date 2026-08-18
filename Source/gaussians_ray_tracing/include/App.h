@@ -135,6 +135,10 @@ public:
 		if (init_imgui() == false)
 			return false;
 
+		std::cout << "Vendor: " << glGetString(GL_VENDOR) << std::endl;
+		std::cout << "Renderer: " << glGetString(GL_RENDERER) << std::endl;
+		std::cout << "Version: " << glGetString(GL_VERSION) << std::endl;
+
 		glEnable(GL_DEPTH_TEST);
 
 		load_shaders();
@@ -151,6 +155,12 @@ public:
 
 	void main_loop()
 	{
+
+		m_camera.Position = glm::vec3(2.08f, 2.18f, -1.65f);
+		m_camera.Front = glm::vec3(-0.5f, -0.14f, 0.86f);
+		m_camera.Up = glm::vec3(-0.1f, 0.992f, 0.11f);
+		m_camera.Right = glm::vec3(-0.88f, 0.0f, -0.47f);
+		m_camera.WorldUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 		auto start_time = std::chrono::high_resolution_clock::now();
 		auto end_time = std::chrono::high_resolution_clock::now();
@@ -341,7 +351,7 @@ public:
 			glUniform3f(light_pos_loc, light_pos[0], light_pos[1], light_pos[2]);
 			glUniform1i(ellipsoid_count_loc, m_loader.get_gaussians_count());
 			glUniform1i(bvh_index_loc, m_bvh_index);
-			glDispatchCompute((m_width + 7) / 8, (m_height + 3) / 4, 1);
+			glDispatchCompute((m_width + 7) / 8, (m_height + 7) / 8, 1);
 			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 			m_shader_texture_draw.use();
@@ -353,6 +363,17 @@ public:
 
 			glClear(GL_DEPTH_BUFFER_BIT);
 			
+			if (m_is_draw_only_selected_bvh_node)
+			{
+				m_shader_bvh.use();
+				glBindVertexArray(m_VAO_BVH);
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
+				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 1.0f, 0.0f, 1.0f);
+				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, 1, m_bvh_index);
+			}
+
 			if (is_draw_bvh)
 			{
 				m_shader_bvh.use();
@@ -390,17 +411,6 @@ public:
 					unsigned int instance_id = m_bvh.size() + prim_id;
 					glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, 1, instance_id);
 				}
-			}
-
-			if (m_is_draw_only_selected_bvh_node)
-			{
-				m_shader_bvh.use();
-				glBindVertexArray(m_VAO_BVH);
-				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "view"), 1, GL_FALSE, glm::value_ptr(view));
-				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-				glUniformMatrix4fv(glGetUniformLocation(m_shader_bvh.get_id(), "model"), 1, GL_FALSE, glm::value_ptr(model));
-				glUniform3f(glGetUniformLocation(m_shader_bvh.get_id(), "color"), 1.0f, 0.0f, 1.0f);
-				glDrawElementsInstancedBaseInstance(GL_LINES, 24, GL_UNSIGNED_INT, 0, 1, m_bvh_index);
 			}
 
 			m_shader_light_source.use();
@@ -461,6 +471,9 @@ public:
 
 		ImGui::Text("Camera Position: (%f, %f, %f)", m_camera.Position.x, m_camera.Position.y, m_camera.Position.z);
 		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Front.x, m_camera.Front.y, m_camera.Front.z);
+		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Up.x, m_camera.Up.y, m_camera.Up.z);
+		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.Right.x, m_camera.Right.y, m_camera.Right.z);
+		ImGui::Text("Camera Direction: (%f, %f, %f)", m_camera.WorldUp.x, m_camera.WorldUp.y, m_camera.WorldUp.z);
 
 		if (ImGui::DragInt("Selected BVH index", &m_bvh_index, 1, 0, static_cast<int>(m_bvh.size() - 1)))
 		{
@@ -586,13 +599,13 @@ private:
 		// m_loader.create_line();
 
 		// m_loader.create_cube();
-		// m_loader.create_random_scene(1000);
+		// m_loader.create_random_scene(100);
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\tractor\\point_cloud.ply");
-		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
+		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\dataset\\chair\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\Users\\MypkaXD\\3dgs_docker\\output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_part_of_chair.ply");
-		m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_tracktor.ply");
+		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_tracktor.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\Splatshop\\splatmodels\\splats\\point_cloud_room.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\3dgs_docker\\my_output\\point_cloud\\iteration_1000\\point_cloud.ply");
 		// m_loader.create_scene_from_file("C:\\dev\\Gaussian_Splatting\\3DGS\\Source\\gaussians_viewer\\test_data\\test_1_iteration\\point_cloud.ply"); // set up my own directory
@@ -686,7 +699,7 @@ private:
 };
 
 
-Camera App::m_camera = Camera(glm::vec3(50.0f, 0.0f, 50.0f));
+Camera App::m_camera = Camera(glm::vec3(2.08f, 2.18f, -1.65f));
 
 float App::m_delta_time = 0.0f;
 float App::m_last_frame = 0.0f;

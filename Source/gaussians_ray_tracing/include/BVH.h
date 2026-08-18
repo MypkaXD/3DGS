@@ -119,8 +119,8 @@ void create_bvh(std::vector<AABB>& aabb, std::vector<AABB>& bvh_boxes, BVHGPU& b
 
 	typename bvh::v2::DefaultBuilder<Node>::Config config;
 	config.quality = bvh::v2::DefaultBuilder<Node>::Quality::High;
-	config.min_leaf_size = 4;
-	config.max_leaf_size = 8;
+	config.min_leaf_size = 1;
+	config.max_leaf_size = 16;
 
 	auto bvh = bvh::v2::DefaultBuilder<Node>::build(bboxes, centers, config);
 

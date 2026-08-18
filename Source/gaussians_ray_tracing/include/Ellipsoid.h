@@ -23,7 +23,7 @@ namespace Ellipsoid
 	struct EllipsoidAdditional
 	{
 		float sh_main[3];
-		float sh_add[45];
+		// float sh_add[45];
 		float opacity;
 	};
 };
